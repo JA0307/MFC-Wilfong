@@ -1724,7 +1724,7 @@ contains
         character(LEN=path_len + 2*name_len) :: file_loc
 
         character(len=20) :: FMT
-
+print*, "HERE"
         write (file_loc, '(A,I0,A)') 'stats_lag_bubbles_', proc_rank, '.dat'
         file_loc = trim(case_dir)//'/D/'//trim(file_loc)
 

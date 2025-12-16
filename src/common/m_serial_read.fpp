@@ -29,28 +29,31 @@ contains
         !!      all new initial condition.
         !! @param q_cons_vf Conservative variables
         !! @param ib_markers track if a cell is within the immersed boundary
-    subroutine s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv, bc_type)
+    subroutine s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv, bc_type, ib_levelset, &
+                                        ib_levelset_norm, airfoil_grid_u, airfoil_grid_l)
 
         character(len=*), intent(in) :: t_step_dir
         type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf
         type(integer_field), intent(inout) :: ib_markers
         type(pres_field), intent(inout), optional :: pb, mv
         type(integer_field), dimension(1:num_dims, -1:1), intent(inout), optional :: bc_type
+        type(levelset_field), intent(IN), optional :: ib_levelset
+        type(levelset_norm_field), intent(IN), optional :: ib_levelset_norm
+        type(vec3_dt), dimension(:), allocatable, intent(inout), optional :: airfoil_grid_u, airfoil_grid_l
 
         call s_read_serial_conservative_Variables_binary(t_step_dir, q_cons_vf)
-        if (ib) call s_read_serial_ib_binary(t_step_dir, ib_markers)
+        if (ib) call s_read_serial_ib_binary(t_step_dir, ib_markers, ib_levelset, ib_levelset_norm, &
+                                             airfoil_grid_u, airfoil_grid_l)
 
 #ifndef MFC_POST_PROCESS
         if (qbmm .and. .not. polytropic) call s_read_serial_nonpolytropic_qbmm_binary(t_step_dir, pb, mv)
 #endif
 
-#ifndef MFC_PRE_PROCESS
-        if (bc_io) then
+        if (bc_io .and. present(bc_type)) then
             call s_read_serial_boundary_condition_files(t_step_dir, bc_type)
         else
             call s_assign_default_bc_type(bc_type)
         end if
-#endif
 
     end subroutine s_read_serial_data_files
 
@@ -78,7 +81,7 @@ contains
             if (${VAR}$ > 0) then
                 ! Checking whether x[y,z]_cb.dat exists
                 file_loc = trim(step_dirpath)//'/${XYZ}$_cb.dat'
-                inquire (FILE=trim(file_loc), EXIST=file_exist)
+                call my_inquire (trim(file_loc), file_exist)
 
                 ! If it exists, x[y,z]_cb.dat is read
                 if (file_exist) then
@@ -111,18 +114,19 @@ contains
 
     end subroutine s_read_serial_grid_binary
 
-    subroutine s_read_serial_ib_binary(step_dirpath, ib_markers)
+    subroutine s_read_serial_ib_binary(step_dirpath, ib_markers, ib_levelset, ib_levelset_norm, &
+                                       airfoil_grid_u, airfoil_grid_l)
 
         character(len=*), intent(in) :: step_dirpath
         type(integer_field), intent(inout) :: ib_markers
+        type(levelset_field), intent(IN), optional :: ib_levelset
+        type(levelset_norm_field), intent(IN), optional :: ib_levelset_norm
+        type(vec3_dt), dimension(:), allocatable, intent(inout), optional :: airfoil_grid_u, airfoil_grid_l
         character(LEN=len_trim(step_dirpath) + name_len) :: file_loc !<
-        character(LEN=int(floor(log10(real(sys_size, wp)))) + 1) :: file_num
 
-        write (file_num, '(I0)') i
+        ! Read Markers
         file_loc = trim(step_dirpath)//'/ib.dat'
-        inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-        ! If it exists, the data file is read
+        call my_inquire(trim(file_loc), file_exist)
         if (file_exist) then
             open (1, FILE=trim(file_loc), FORM='unformatted', &
                   STATUS='old', ACTION='read')
@@ -133,6 +137,57 @@ contains
                              //trim(step_dirpath)// &
                              '. Exiting.')
         end if
+
+        ! Read Levelset
+        if (present(ib_levelset)) then
+            write (file_loc, '(A)') &
+                trim(step_dirpath)//'/levelset.dat'
+            inquire (FILE=trim(file_loc), EXIST=file_exist)
+            if (file_exist) then
+                open (2, FILE=trim(file_loc), FORM='unformatted', ACTION='read')
+                read (2) ib_levelset%sf(0:m, 0:n, 0:p, 1:num_ibs);
+                close (2)
+            else
+                call s_mpi_abort(trim(file_loc)//' is missing. Exiting.')
+            end if
+        end if
+
+        ! Read Levelset Norm
+        if (present(ib_levelset_norm)) then
+            write (file_loc, '(A)') trim(step_dirpath)//'/levelset_norm.dat'
+            inquire (FILE=trim(file_loc), EXIST=file_exist)
+            if (file_exist) then
+                open (2, FILE=trim(file_loc), FORM='unformatted', ACTION='read')
+                read (2) ib_levelset_norm%sf(0:m, 0:n, 0:p, 1:num_ibs, 1:3); close (2)
+            else
+                call s_mpi_abort(trim(file_loc)//' is missing. Exiting.')
+            end if
+        end if
+
+#ifndef MFC_POST_PROCESS
+        ! Read Airfoil Variables
+        if (present(airfoil_grid_u) .and. present(airfoil_grid_L)) then
+            do i = 1, num_ibs
+                if (patch_ib(i)%geometry == 4) then
+#ifdef MFC_SIMULATION
+                    ! In pre_process Np is calculated in m_ib_patches
+                    Np = int((patch_ib(i)%p*patch_ib(i)%c/dx(0))*20) + int(((patch_ib(i)%c - patch_ib(i)%p*patch_ib(i)%c)/dx(0))*20) + 1
+#endif
+                    #:for VAR in ['u', 'l']
+                        allocate (airfoil_grid_${VAR}$(1:Np))
+                        write (file_loc, '(A)') trim(step_dirpath)//'/airfoil_${VAR}$.dat'
+                        inquire (FILE=trim(file_loc), EXIST=file_exist)
+                        if (file_exist) then
+                            open (2, FILE=trim(file_loc), FORM='unformatted', ACTION='read')
+                            read (2) airfoil_grid_${VAR}$; close (2)
+                        else
+                            call s_mpi_abort(trim(file_loc)//' is missing. Exiting.')
+                        end if
+                    #:endfor
+                end if
+            end do
+        end if
+#endif
 
     end subroutine s_read_serial_ib_binary
 
@@ -149,7 +204,7 @@ contains
             write (file_num, '(I0)') i
             file_loc = trim(step_dirpath)//'/q_cons_vf'// &
                        trim(file_num)//'.dat'
-            inquire (FILE=trim(file_loc), EXIST=file_exist)
+            call my_inquire(trim(file_loc), file_exist)
 
             ! If it exists, the data file is read
             if (file_exist) then
@@ -180,7 +235,7 @@ contains
                 write (file_num, '(I0)') sys_size + r + (i - 1)*nnode
                 file_loc = trim(step_dirpath)//'/pb'// &
                            trim(file_num)//'.dat'
-                inquire (FILE=trim(file_loc), EXIST=file_exist)
+                call my_inquire(trim(file_loc), file_exist)
 
                 ! If it exists, the data file is read
                 if (file_exist) then
@@ -204,7 +259,7 @@ contains
                 write (file_num, '(I0)') sys_size + r + (i - 1)*4
                 file_loc = trim(step_dirpath)//'/mv'// &
                            trim(file_num)//'.dat'
-                inquire (FILE=trim(file_loc), EXIST=file_exist)
+                call my_inquire (trim(file_loc), file_exist)
 
                 ! If it exists, the data file is read
                 if (file_exist) then

@@ -30,7 +30,9 @@ contains
         !! @param ib_markers track if a cell is within the immersed boundary
         !! @param levelset closest distance from every cell to the IB
         !! @param levelset_norm normalized vector from every cell to the closest point to the IB
-    impure subroutine s_write_serial_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers, q_T_sf)
+    impure subroutine s_write_serial_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, &
+                                                ib_markers, ib_levelset, ib_levelset_norm, q_T_sf, beta, &
+                                                airfoil_grid_u, airfoil_grid_l)
 
         character(len=*), intent(in) :: t_step_dir
         integer, intent(in) :: save_count
@@ -38,7 +40,11 @@ contains
         type(integer_field), dimension(1:num_dims, -1:1), intent(in) :: bc_type
         type(pres_field), intent(in) :: pb, mv
         type(integer_field), intent(in) :: ib_markers
+        type(levelset_field), intent(IN), optional :: ib_levelset
+        type(levelset_norm_field), intent(IN), optional :: ib_levelset_norm
         type(scalar_field), intent(inout), optional :: q_T_sf
+        type(scalar_field), intent(inout), optional :: beta
+        type(vec3_dt), dimension(:), intent(inout), optional :: airfoil_grid_u, airfoil_grid_l
 
         character(LEN=len_trim(t_step_dir) + name_len) :: file_loc, temp_dir
         integer :: t_step !< Time step number
@@ -65,7 +71,8 @@ contains
 
         call s_write_serial_conservative_variables_binary(t_step_dir, q_cons_vf)
         if (qbmm .and. .not. polytropic) call s_write_serial_nonpolytropic_qbmm_binary(t_step_dir, pb, mv)
-        if (ib) call s_write_serial_ib_binary(t_step_dir, ib_markers)
+        if (ib) call s_write_serial_ib_binary(t_step_dir, ib_markers, ib_levelset, ib_levelset_norm, &
+                                              airfoil_grid_u, airfoil_grid_l)
 
         if (serial_txt_io) then
             ! Query if time-step directory exists, if not create it
@@ -97,13 +104,14 @@ contains
 
 #ifdef MFC_PRE_PROCESS
             if (num_dims == 1) call s_write_prim_variables_txt_pre_process(file_loc, save_count, q_cons_vf)
+            if (ib) call s_write_serial_ib_txt(file_loc, save_count, ib_markers)
 #else
             call s_write_prim_variables_txt(file_loc, save_count, q_cons_vf, q_prim_vf, q_T_sf)
 #endif
 
             call s_write_serial_conservative_variables_txt(file_loc, save_count, q_cons_vf)
             if (qbmm .and. .not. polytropic) call s_write_serial_nonpolytropic_qbmm_txt(file_loc, save_count, pb, mv)
-            if (ib) call s_write_serial_ib_txt(file_loc, save_count, ib_markers)
+            if (present(beta) .and. bubbles_lagrange) call s_write_serial_beta_txt(file_loc, save_count, beta)
         end if
 #endif
     end subroutine s_write_serial_data_files
@@ -124,29 +132,50 @@ contains
 #endif
     end subroutine s_write_serial_grid_binary
 
-    subroutine s_write_serial_ib_binary(step_dirpath, ib_markers)
+    subroutine s_write_serial_ib_binary(step_dirpath, ib_markers, ib_levelset, ib_levelset_norm, airfoil_grid_u, airfoil_grid_l)
 
         character(len=*), intent(in) :: step_dirpath
         type(integer_field), intent(in) :: ib_markers
+        type(levelset_field), intent(IN), optional :: ib_levelset
+        type(levelset_norm_field), intent(IN), optional :: ib_levelset_norm
+        type(vec3_dt), dimension(:), intent(inout), optional :: airfoil_grid_u, airfoil_grid_l
+
         character(LEN=len_trim(step_dirpath) + name_len) :: file_loc !<
 #ifndef MFC_POST_PROCESS
         ! Outputting IB Markers
         file_loc = trim(step_dirpath)// '/ib.dat'
         open (1, FILE=trim(file_loc), FORM='unformatted', STATUS=status)
-        write (1) ib_markers%sf
+        write (1) ib_markers%sf(0:m, 0:n, 0:p)
         close (1)
 
-        ! Write airfoil specific data
-        do i = 1, num_ibs
-            if (patch_ib(i)%geometry == 4) then
-                #:for VAR in ['u', 'l']
-                    file_loc = trim(step_dirpath)//'/airfoil_${VAR}$.dat'
-                    open (1, FILE=trim(file_loc), FORM='unformatted', STATUS=status)
-                    write (1) airfoil_grid_${VAR}$(1:Np)
-                    close (1)
-                #:endfor
-            end if
-        end do
+        if (present(ib_levelset)) then
+            ! Outputting IB Level Set
+            file_loc = trim(step_dirpath)// '/levelset.dat'
+            open (1, FILE=trim(file_loc), FORM='unformatted', STATUS=status)
+            write (1) ib_levelset%sf(0:m, 0:n, 0:p, 1:num_ibs)
+            close (1)
+        end if
+
+        if (present(ib_levelset_norm)) then
+            file_loc = trim(step_dirpath)// '/levelset_norm.dat'
+            open (1, FILE=trim(file_loc), FORM='unformatted', STATUS=status)
+            write (1) ib_levelset_norm%sf(0:m, 0:n, 0:p, 1:num_ibs, 1:3)
+            close (1)
+        end if
+
+        ! Write Airfoil Variables
+        if (present(airfoil_grid_u) .and. present(airfoil_grid_l)) then
+            do i = 1, num_ibs
+                if (patch_ib(i)%geometry == 4) then
+                    #:for VAR in ['u', 'l']
+                        file_loc = trim(step_dirpath)//'/airfoil_${VAR}$.dat'
+                        open (1, FILE=trim(file_loc), FORM='unformatted', STATUS=status)
+                        write (1) airfoil_grid_${VAR}$(1:Np)
+                        close (1)
+                    #:endfor
+                end if
+            end do
+        end if
 #endif
 
     end subroutine s_write_serial_ib_binary
@@ -160,7 +189,7 @@ contains
         !! Generic string used to store the address of a particular file
 #ifndef MFC_POST_PROCESS
         ! Write IB Markers
-        write (file_loc, '(A,I2.2,A,I6.6,A)') trim(step_dirpath)//'/ib_markers.', proc_rank, '.', save_count, '.dat'
+        write (file_loc, '(A,I2.2,A)') trim(step_dirpath)//'/ib_markers.', proc_rank, '.dat'
         open (2, FILE=trim(file_loc))
         do j = 0, m
             do k = 0, n
@@ -178,14 +207,14 @@ contains
         ! Write airfoil specific data
         do i = 1, num_ibs
             if (patch_ib(i)%geometry == 4) then
-                write (file_loc, '(A,I2.2,A,I6.6,A)') trim(step_dirpath)//'/airfoil_u.', proc_rank, '.', save_count, '.dat'
+                write (file_loc, '(A,I2.2,A)') trim(step_dirpath)//'/airfoil_u.', proc_rank, '.dat'
                 open (2, FILE=trim(file_loc))
                 do j = 1, Np
                     write (2, FMT) airfoil_grid_u(j)%x, airfoil_grid_u(j)%y
                 end do
                 close (2)
 
-                write (file_loc, '(A,I2.2,A,I6.6,A)') trim(step_dirpath)//'/airfoil_l.', proc_rank,  '.', save_count, '.dat'
+                write (file_loc, '(A,I2.2,A)') trim(step_dirpath)//'/airfoil_l.', proc_rank, '.dat'
                 open (2, FILE=trim(file_loc))
                 do j = 1, Np
                     write (2, FMT) airfoil_grid_l(j)%x, airfoil_grid_l(j)%y
@@ -331,6 +360,32 @@ contains
         end do
 #endif
     end subroutine s_write_serial_nonpolytropic_qbmm_txt
+
+    subroutine s_write_serial_beta_txt(step_dirpath, save_count, beta)
+
+        character(len=*), intent(in) :: step_dirpath
+        integer, intent(in) :: save_count
+        type(scalar_field), intent(inout) :: beta
+        character(LEN=len_trim(step_dirpath) + name_len) :: file_loc
+
+        write (file_loc, '(A,I0,A,I2.2,A,I6.6,A)') trim(step_dirpath)//'/beta.', i, '.', proc_rank, '.', save_count, '.dat'
+        open (2, FILE=trim(file_loc))
+        do j = 0, m
+            do k = 0, n
+                do l = 0, p
+                    if (num_dims == 2) then
+                        write (2, FMT) x_cb(j), y_cb(k), beta%sf(j, k, l)
+                    elseif (num_dims == 3) then
+                        write (2, FMT) x_cb(j), y_cb(k), z_cb(l), beta%sf(j, k, l)
+                    end if
+                end do
+                if (p > 0) write (2, *)
+            end do
+            write (2, *)
+        end do
+        close (2)
+
+    end subroutine s_write_serial_beta_txt
 
 #ifdef MFC_PRE_PROCESS
     subroutine s_write_prim_variables_txt_pre_process(step_dirpath, save_count, q_cons_vf)

@@ -649,6 +649,7 @@ contains
                     end do
                     call s_update_mib(num_ibs, levelset, levelset_norm)
                 end if
+
                 if (qbmm .and. .not. polytropic) then
                     call s_ibm_correct_state(q_cons_ts(1)%vf, q_prim_vf, pb_ts(1)%sf, mv_ts(1)%sf)
                 else

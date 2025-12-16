@@ -98,15 +98,15 @@ contains
 
         if (old_ic) then
             if (parallel_io) then
+                call s_read_parallel_ic_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+            else
                 write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
                 proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
 
                 write (t_step_dir, '(A,I0)') '/', t_step_start
                 t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
-                call s_read_parallel_ic_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
-            else
-                !write (t_step_dir)
-                !call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv)
+
+                call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv)
             end if
         end if
 
@@ -149,16 +149,18 @@ contains
         !! Possible location of time-step folder containing preexisting grid and/or
         !! conservative variables data to be used as starting point for pre-process
 
-        if (.not. parallel_io) then
+        if (parallel_io) then
+            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+        else
             write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
             proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
 
             write (t_step_dir, '(A,I0)') '/', t_step_start
             t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
 
-            call s_write_serial_data_files(t_step_dir, t_step_start, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
-        else
-            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+            call s_write_serial_data_files(t_step_dir, t_step_start, q_cons_vf, q_prim_vf, bc_type, &
+                                            pb, mv, ib_markers, ib_levelset=levelset, ib_levelset_norm=levelset_norm, &
+                                            airfoil_grid_u=airfoil_grid_u, airfoil_grid_l=airfoil_grid_l)
         end if
 
     end subroutine s_write_data_files

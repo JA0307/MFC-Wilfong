@@ -133,7 +133,10 @@ contains
         type(integer_field), intent(inout) :: ib_markers
         type(integer_field), dimension(1:num_dims, -1:1), intent(inout) :: bc_type
 
-        if (parallel_io .eqv. .false.) then
+        if (parallel_io) then
+            !call s_read_parallel_grid_data_files(t_step_dir)
+            !call s_read_parallel_data_files(q_cons_vf)
+        else
             write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
             proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
 
@@ -141,15 +144,14 @@ contains
             t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
 
             call s_read_serial_grid_binary(t_step_dir)
-            call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv, bc_type)
-        else
-            !call s_read_parallel_grid_data_files(t_step_dir)
-            !call s_read_parallel_data_files(q_cons_vf)
+            call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv, &
+                                            bc_type, ib_levelset=levelset, ib_levelset_norm=levelset_norm, &
+                                            airfoil_grid_u=airfoil_grid_u, airfoil_grid_l=airfoil_grid_l)
         end if
 
     end subroutine s_read_data_files
 
-    impure subroutine s_write_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
+    impure subroutine s_write_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers, q_T_sf, beta)
 
         character(len=*), intent(inout) :: t_step_dir
         integer, intent(in) :: save_count
@@ -157,17 +159,20 @@ contains
         type(integer_field), dimension(1:num_dims, -1:1), intent(in) :: bc_type
         type(pres_field), intent(inout) :: pb, mv
         type(integer_field), intent(inout) :: ib_markers
+        type(scalar_field), intent(inout) :: q_T_sf
+        type(scalar_field), intent(inout), optional :: beta
 
-        if (.not. parallel_io) then
+        if (parallel_io) then
+            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+        else
             write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
             proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
 
             write (t_step_dir, '(A,I0)') '/', save_count
             t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
 
-            call s_write_serial_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers, q_T_sf)
-        else
-            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+            call s_write_serial_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, &
+                                            pb, mv, ib_markers, q_T_sf=q_T_sf, beta=beta)
         end if
 
     end subroutine s_write_data_files
@@ -989,24 +994,29 @@ contains
             save_count = t_step
         end if
 
-        !if (bubbles_lagrange) then
-            !$:GPU_UPDATE(host='[lag_id, mtn_pos, mtn_posPrev, mtn_vel, intfc_rad, &
-                !& intfc_vel, bub_R0, Rmax_stats, Rmin_stats, bub_dphidt, gas_p, &
-                !& gas_mv, gas_mg, gas_betaT, gas_betaC]')
-            !do i = 1, nBubs
-                !if (ieee_is_nan(intfc_rad(i, 1)) .or. intfc_rad(i, 1) <= 0._wp) then
-                    !call s_mpi_abort("Bubble radius is negative or NaN, please reduce dt.")
-                !end if
-            !end do
+        if (bubbles_lagrange) then
+            $:GPU_UPDATE(host='[lag_id, mtn_pos, mtn_posPrev, mtn_vel, intfc_rad, &
+                & intfc_vel, bub_R0, Rmax_stats, Rmin_stats, bub_dphidt, gas_p, &
+                & gas_mv, gas_mg, gas_betaT, gas_betaC]')
+            do i = 1, nBubs
+                if (ieee_is_nan(intfc_rad(i, 1)) .or. intfc_rad(i, 1) <= 0._wp) then
+                    call s_mpi_abort("Bubble radius is negative or NaN, please reduce dt.")
+                end if
+            end do
 
-            !$:GPU_UPDATE(host='[q_beta(1)%sf]')
-            !call s_write_data_files(q_cons_ts(stor)%vf, q_T_sf, q_prim_vf, save_count, bc_type, q_beta(1))
-            !$:GPU_UPDATE(host='[Rmax_stats,Rmin_stats,gas_p,gas_mv,intfc_vel]')
-            !call s_write_restart_lag_bubbles(save_count) !parallel
-            !if (lag_params%write_bubbles_stats) call s_write_lag_bubble_stats()
-        !else
-            call s_write_data_files(t_step_dir, save_count, q_cons_ts(stor)%vf, q_prim_vf, bc_type, pb_ts(1), mv_ts(1), ib_markers)
-        !end if
+            $:GPU_UPDATE(host='[q_beta(1)%sf]')
+            call s_write_data_files(t_step_dir, save_count, q_cons_ts(stor)%vf, q_prim_vf, bc_type, &
+                                    pb_ts(1), mv_ts(1), ib_markers, q_T_sf, q_beta(1))
+
+            $:GPU_UPDATE(host='[Rmax_stats,Rmin_stats,gas_p,gas_mv,intfc_vel]')
+
+            call s_write_restart_lag_bubbles(save_count) !parallel
+
+            if (lag_params%write_bubbles_stats) call s_write_lag_bubble_stats()
+        else
+            call s_write_data_files(t_step_dir, save_count, q_cons_ts(stor)%vf, q_prim_vf, bc_type, &
+                                    pb_ts(1), mv_ts(1), ib_markers, q_T_sf)
+        end if
 
         call nvtxEndRange
         call cpu_time(finish)
