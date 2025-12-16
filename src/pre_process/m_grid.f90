@@ -28,22 +28,9 @@ module m_grid
 
     implicit none
 
-    private; 
-    public :: s_initialize_grid_module, &
-              s_generate_grid, &
-              s_generate_serial_grid, &
-              s_generate_parallel_grid, &
-              s_finalize_grid_module
-
-    abstract interface
-
-        impure subroutine s_generate_abstract_grid
-
-        end subroutine s_generate_abstract_grid
-
-    end interface
-
-    procedure(s_generate_abstract_grid), pointer :: s_generate_grid => null()
+    private;
+    public :: s_generate_serial_grid, &
+              s_generate_parallel_grid
 
 contains
 
@@ -97,7 +84,6 @@ contains
         if (n == 0) return
 
         if (grid_geometry == 2 .and. f_approx_equal(y_domain%beg, 0.0_wp)) then
-            !IF (grid_geometry == 2) THEN
 
             dy = (y_domain%end - y_domain%beg)/real(2*n + 1, wp)
 
@@ -337,24 +323,5 @@ contains
 #endif
 
     end subroutine s_generate_parallel_grid
-
-    !> Computation of parameters, allocation procedures, and/or
-        !!              any other tasks needed to properly setup the module
-    impure subroutine s_initialize_grid_module
-
-        if (parallel_io .neqv. .true.) then
-            s_generate_grid => s_generate_serial_grid
-        else
-            s_generate_grid => s_generate_parallel_grid
-        end if
-
-    end subroutine s_initialize_grid_module
-
-    !> Deallocation procedures for the module
-    impure subroutine s_finalize_grid_module
-
-        s_generate_grid => null()
-
-    end subroutine s_finalize_grid_module
 
 end module m_grid

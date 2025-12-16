@@ -93,12 +93,17 @@ module m_start_up
 
     use m_igr
 
+    use m_serial_read
+
+    use m_serial_write
+
+    use m_parallel_io
+
     implicit none
 
     private; public :: s_read_input_file, &
  s_check_input_file, &
  s_read_data_files, &
- s_read_serial_data_files, &
  s_read_parallel_data_files, &
  s_initialize_internal_energy_equations, &
  s_initialize_modules, s_initialize_gpu_vars, &
@@ -110,23 +115,62 @@ module m_start_up
 
     real(wp) :: dt_init
 
+    character(LEN=path_len + name_len) :: proc_rank_dir !<
+    !! Location of the folder associated with the rank of the local processor
+    character(LEN=path_len + 2*name_len), private :: t_step_dir !<
+    !! Possible location of time-step folder containing preexisting grid and/or
+    !! conservative variables data to be used as starting point for pre-process
+
 contains
 
     !> Read data files. Dispatch subroutine that replaces procedure pointer.
         !! @param q_cons_vf Conservative variables
-    impure subroutine s_read_data_files(q_cons_vf)
+    impure subroutine s_read_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers, bc_type)
 
-        type(scalar_field), &
-            dimension(sys_size), &
-            intent(inout) :: q_cons_vf
+        character(len=*), intent(inout) :: t_step_dir
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf
+        type(pres_field), intent(inout) :: pb, mv
+        type(integer_field), intent(inout) :: ib_markers
+        type(integer_field), dimension(1:num_dims, -1:1), intent(inout) :: bc_type
 
-        if (.not. parallel_io) then
-            call s_read_serial_data_files(q_cons_vf)
+        if (parallel_io .eqv. .false.) then
+            write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
+            proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
+
+            write (t_step_dir, '(A,I0)') '/', t_step_start
+            t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
+
+            call s_read_serial_grid_binary(t_step_dir)
+            call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv, bc_type)
         else
-            call s_read_parallel_data_files(q_cons_vf)
+            !call s_read_parallel_grid_data_files(t_step_dir)
+            !call s_read_parallel_data_files(q_cons_vf)
         end if
 
     end subroutine s_read_data_files
+
+    impure subroutine s_write_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
+
+        character(len=*), intent(inout) :: t_step_dir
+        integer, intent(in) :: save_count
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf, q_prim_vf
+        type(integer_field), dimension(1:num_dims, -1:1), intent(in) :: bc_type
+        type(pres_field), intent(inout) :: pb, mv
+        type(integer_field), intent(inout) :: ib_markers
+
+        if (.not. parallel_io) then
+            write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
+            proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
+
+            write (t_step_dir, '(A,I0)') '/', save_count
+            t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
+
+            call s_write_serial_data_files(t_step_dir, save_count, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers, q_T_sf)
+        else
+            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+        end if
+
+    end subroutine s_write_data_files
 
     !>  The purpose of this procedure is to first verify that an
         !!      input file has been made available by the user. Provided
@@ -257,256 +301,7 @@ contains
 
     end subroutine s_check_input_file
 
-        !!              initial condition and grid data files. The cell-average
-        !!              conservative variables constitute the former, while the
-        !!              cell-boundary locations in x-, y- and z-directions make
-        !!              up the latter. This procedure also calculates the cell-
-        !!              width distributions from the cell-boundary locations.
-        !! @param q_cons_vf Cell-averaged conservative variables
-    impure subroutine s_read_serial_data_files(q_cons_vf)
-
-        type(scalar_field), dimension(sys_size), intent(INOUT) :: q_cons_vf
-
-        character(LEN=path_len + 2*name_len) :: t_step_dir !<
-            !! Relative path to the starting time-step directory
-
-        character(LEN=path_len + 3*name_len) :: file_path !<
-            !! Relative path to the grid and conservative variables data files
-
-        logical :: file_exist !<
-        ! Logical used to check the existence of the data files
-
-        integer :: i, r !< Generic loop iterator
-
-        ! Confirming that the directory from which the initial condition and
-        ! the grid data files are to be read in exists and exiting otherwise
-        if (cfl_dt) then
-            write (t_step_dir, '(A,I0,A,I0)') &
-                trim(case_dir)//'/p_all/p', proc_rank, '/', n_start
-        else
-            write (t_step_dir, '(A,I0,A,I0)') &
-                trim(case_dir)//'/p_all/p', proc_rank, '/', t_step_start
-        end if
-
-        file_path = trim(t_step_dir)//'/.'
-        call my_inquire(file_path, file_exist)
-
-        if (file_exist .neqv. .true.) then
-            call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-        end if
-
-        if (bc_io) then
-            call s_read_serial_boundary_condition_files(t_step_dir, bc_type)
-        else
-            call s_assign_default_bc_type(bc_type)
-        end if
-
-        ! Cell-boundary Locations in x-direction
-        file_path = trim(t_step_dir)//'/x_cb.dat'
-
-        inquire (FILE=trim(file_path), EXIST=file_exist)
-
-        if (file_exist) then
-            open (2, FILE=trim(file_path), &
-                  FORM='unformatted', &
-                  ACTION='read', &
-                  STATUS='old')
-            read (2) x_cb(-1:m); close (2)
-        else
-            call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-        end if
-
-        dx(0:m) = x_cb(0:m) - x_cb(-1:m - 1)
-        x_cc(0:m) = x_cb(-1:m - 1) + dx(0:m)/2._wp
-
-        if (ib) then
-            do i = 1, num_ibs
-                if (patch_ib(i)%c > 0) then
-                    Np = int((patch_ib(i)%p*patch_ib(i)%c/dx(0))*20) + int(((patch_ib(i)%c - patch_ib(i)%p*patch_ib(i)%c)/dx(0))*20) + 1
-                end if
-            end do
-        end if
-
-        ! Cell-boundary Locations in y-direction
-        if (n > 0) then
-
-            file_path = trim(t_step_dir)//'/y_cb.dat'
-
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) y_cb(-1:n); close (2)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-
-            dy(0:n) = y_cb(0:n) - y_cb(-1:n - 1)
-            y_cc(0:n) = y_cb(-1:n - 1) + dy(0:n)/2._wp
-
-        end if
-
-        ! Cell-boundary Locations in z-direction
-        if (p > 0) then
-
-            file_path = trim(t_step_dir)//'/z_cb.dat'
-
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) z_cb(-1:p); close (2)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-
-            dz(0:p) = z_cb(0:p) - z_cb(-1:p - 1)
-            z_cc(0:p) = z_cb(-1:p - 1) + dz(0:p)/2._wp
-
-        end if
-
-        do i = 1, sys_size
-            write (file_path, '(A,I0,A)') &
-                trim(t_step_dir)//'/q_cons_vf', i, '.dat'
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) q_cons_vf(i)%sf(0:m, 0:n, 0:p); close (2)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-        end do
-
-        if (bubbles_euler .or. elasticity) then
-            ! Read pb and mv for non-polytropic qbmm
-            if (qbmm .and. .not. polytropic) then
-                do i = 1, nb
-                    do r = 1, nnode
-                        write (file_path, '(A,I0,A)') &
-                            trim(t_step_dir)//'/pb', sys_size + (i - 1)*nnode + r, '.dat'
-                        inquire (FILE=trim(file_path), EXIST=file_exist)
-                        if (file_exist) then
-                            open (2, FILE=trim(file_path), &
-                                  FORM='unformatted', &
-                                  ACTION='read', &
-                                  STATUS='old')
-                            read (2) pb_ts(1)%sf(0:m, 0:n, 0:p, r, i); close (2)
-                        else
-                            call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-                        end if
-                    end do
-                end do
-                do i = 1, nb
-                    do r = 1, nnode
-                        write (file_path, '(A,I0,A)') &
-                            trim(t_step_dir)//'/mv', sys_size + (i - 1)*nnode + r, '.dat'
-                        inquire (FILE=trim(file_path), EXIST=file_exist)
-                        if (file_exist) then
-                            open (2, FILE=trim(file_path), &
-                                  FORM='unformatted', &
-                                  ACTION='read', &
-                                  STATUS='old')
-                            read (2) mv_ts(1)%sf(0:m, 0:n, 0:p, r, i); close (2)
-                        else
-                            call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-                        end if
-                    end do
-                end do
-            end if
-        end if
-
-        ! Read IBM Data
-        if (ib) then
-            ! Read IB markers
-            write (file_path, '(A,I0,A)') &
-                trim(t_step_dir)//'/ib.dat'
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) ib_markers%sf(0:m, 0:n, 0:p); close (2)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-
-            ! Read Levelset
-            write (file_path, '(A)') &
-                trim(t_step_dir)//'/levelset.dat'
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) levelset%sf(0:m, 0:n, 0:p, 1:num_ibs); close (2)
-                ! print*, 'check', STL_levelset(106, 50, 0, 1)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-
-            ! Read Levelset Norm
-            write (file_path, '(A)') &
-                trim(t_step_dir)//'/levelset_norm.dat'
-            inquire (FILE=trim(file_path), EXIST=file_exist)
-            if (file_exist) then
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      ACTION='read', &
-                      STATUS='old')
-                read (2) levelset_norm%sf(0:m, 0:n, 0:p, 1:num_ibs, 1:3); close (2)
-            else
-                call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-            end if
-
-            do i = 1, num_ibs
-                if (patch_ib(i)%c > 0) then
-                    allocate (airfoil_grid_u(1:Np))
-                    allocate (airfoil_grid_l(1:Np))
-
-                    write (file_path, '(A)') &
-                        trim(t_step_dir)//'/airfoil_u.dat'
-                    inquire (FILE=trim(file_path), EXIST=file_exist)
-                    if (file_exist) then
-                        open (2, FILE=trim(file_path), &
-                              FORM='unformatted', &
-                              ACTION='read', &
-                              STATUS='old')
-                        read (2) airfoil_grid_u; close (2)
-                    else
-                        call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-                    end if
-
-                    write (file_path, '(A)') &
-                        trim(t_step_dir)//'/airfoil_l.dat'
-                    inquire (FILE=trim(file_path), EXIST=file_exist)
-                    if (file_exist) then
-                        open (2, FILE=trim(file_path), &
-                              FORM='unformatted', &
-                              ACTION='read', &
-                              STATUS='old')
-                        read (2) airfoil_grid_l; close (2)
-                    else
-                        call s_mpi_abort(trim(file_path)//' is missing. Exiting.')
-                    end if
-                end if
-            end do
-
-        end if
-
-    end subroutine s_read_serial_data_files
-
-        !! @param q_cons_vf Conservative variables
+    !! @param q_cons_vf Conservative variables
     impure subroutine s_read_parallel_data_files(q_cons_vf)
 
         type(scalar_field), &
@@ -537,14 +332,6 @@ contains
         integer :: m_glb_ds, n_glb_ds, p_glb_ds
         integer :: m_glb_read, n_glb_read, p_glb_read ! data size of read
 
-        allocate (x_cb_glb(-1:m_glb))
-        allocate (y_cb_glb(-1:n_glb))
-        allocate (z_cb_glb(-1:p_glb))
-
-        ! Read in cell boundary locations in x-direction
-        file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'x_cb.dat'
-        inquire (FILE=trim(file_loc), EXIST=file_exist)
-
         if (down_sample) then
             m_ds = int((m + 1)/3) - 1
             n_ds = int((n + 1)/3) - 1
@@ -555,22 +342,6 @@ contains
             p_glb_ds = int((p_glb + 1)/3) - 1
         end if
 
-        if (file_exist) then
-            data_size = m_glb + 2
-            call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-            call MPI_FILE_READ(ifile, x_cb_glb, data_size, mpi_p, status, ierr)
-            call MPI_FILE_CLOSE(ifile, ierr)
-        else
-            call s_mpi_abort('File '//trim(file_loc)//' is missing. Exiting.')
-        end if
-
-        ! Assigning local cell boundary locations
-        x_cb(-1:m) = x_cb_glb((start_idx(1) - 1):(start_idx(1) + m))
-        ! Computing the cell width distribution
-        dx(0:m) = x_cb(0:m) - x_cb(-1:m - 1)
-        ! Computing the cell center locations
-        x_cc(0:m) = x_cb(-1:m - 1) + dx(0:m)/2._wp
-
         if (ib) then
             do i = 1, num_ibs
                 if (patch_ib(i)%c > 0) then
@@ -578,51 +349,6 @@ contains
                     allocate (MPI_IO_airfoil_IB_DATA%var(1:2*Np))
                 end if
             end do
-        end if
-
-        if (n > 0) then
-            ! Read in cell boundary locations in y-direction
-            file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'y_cb.dat'
-            inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-            if (file_exist) then
-                data_size = n_glb + 2
-                call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-                call MPI_FILE_READ(ifile, y_cb_glb, data_size, mpi_p, status, ierr)
-                call MPI_FILE_CLOSE(ifile, ierr)
-            else
-                call s_mpi_abort('File '//trim(file_loc)//' is missing. Exiting.')
-            end if
-
-            ! Assigning local cell boundary locations
-            y_cb(-1:n) = y_cb_glb((start_idx(2) - 1):(start_idx(2) + n))
-            ! Computing the cell width distribution
-            dy(0:n) = y_cb(0:n) - y_cb(-1:n - 1)
-            ! Computing the cell center locations
-            y_cc(0:n) = y_cb(-1:n - 1) + dy(0:n)/2._wp
-
-            if (p > 0) then
-                ! Read in cell boundary locations in z-direction
-                file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'z_cb.dat'
-                inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-                if (file_exist) then
-                    data_size = p_glb + 2
-                    call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-                    call MPI_FILE_READ(ifile, z_cb_glb, data_size, mpi_p, status, ierr)
-                    call MPI_FILE_CLOSE(ifile, ierr)
-                else
-                    call s_mpi_abort('File '//trim(file_loc)//'is missing. Exiting.')
-                end if
-
-                ! Assigning local cell boundary locations
-                z_cb(-1:p) = z_cb_glb((start_idx(3) - 1):(start_idx(3) + p))
-                ! Computing the cell width distribution
-                dz(0:p) = z_cb(0:p) - z_cb(-1:p - 1)
-                ! Computing the cell center locations
-                z_cc(0:p) = z_cb(-1:p - 1) + dz(0:p)/2._wp
-
-            end if
         end if
 
         if (file_per_process) then
@@ -1263,24 +989,24 @@ contains
             save_count = t_step
         end if
 
-        if (bubbles_lagrange) then
-            $:GPU_UPDATE(host='[lag_id, mtn_pos, mtn_posPrev, mtn_vel, intfc_rad, &
-                & intfc_vel, bub_R0, Rmax_stats, Rmin_stats, bub_dphidt, gas_p, &
-                & gas_mv, gas_mg, gas_betaT, gas_betaC]')
-            do i = 1, nBubs
-                if (ieee_is_nan(intfc_rad(i, 1)) .or. intfc_rad(i, 1) <= 0._wp) then
-                    call s_mpi_abort("Bubble radius is negative or NaN, please reduce dt.")
-                end if
-            end do
+        !if (bubbles_lagrange) then
+            !$:GPU_UPDATE(host='[lag_id, mtn_pos, mtn_posPrev, mtn_vel, intfc_rad, &
+                !& intfc_vel, bub_R0, Rmax_stats, Rmin_stats, bub_dphidt, gas_p, &
+                !& gas_mv, gas_mg, gas_betaT, gas_betaC]')
+            !do i = 1, nBubs
+                !if (ieee_is_nan(intfc_rad(i, 1)) .or. intfc_rad(i, 1) <= 0._wp) then
+                    !call s_mpi_abort("Bubble radius is negative or NaN, please reduce dt.")
+                !end if
+            !end do
 
-            $:GPU_UPDATE(host='[q_beta(1)%sf]')
-            call s_write_data_files(q_cons_ts(stor)%vf, q_T_sf, q_prim_vf, save_count, bc_type, q_beta(1))
-            $:GPU_UPDATE(host='[Rmax_stats,Rmin_stats,gas_p,gas_mv,intfc_vel]')
-            call s_write_restart_lag_bubbles(save_count) !parallel
-            if (lag_params%write_bubbles_stats) call s_write_lag_bubble_stats()
-        else
-            call s_write_data_files(q_cons_ts(stor)%vf, q_T_sf, q_prim_vf, save_count, bc_type)
-        end if
+            !$:GPU_UPDATE(host='[q_beta(1)%sf]')
+            !call s_write_data_files(q_cons_ts(stor)%vf, q_T_sf, q_prim_vf, save_count, bc_type, q_beta(1))
+            !$:GPU_UPDATE(host='[Rmax_stats,Rmin_stats,gas_p,gas_mv,intfc_vel]')
+            !call s_write_restart_lag_bubbles(save_count) !parallel
+            !if (lag_params%write_bubbles_stats) call s_write_lag_bubble_stats()
+        !else
+            call s_write_data_files(t_step_dir, save_count, q_cons_ts(stor)%vf, q_prim_vf, bc_type, pb_ts(1), mv_ts(1), ib_markers)
+        !end if
 
         call nvtxEndRange
         call cpu_time(finish)
@@ -1362,17 +1088,17 @@ contains
 
         ! Reading in the user provided initial condition and grid data
         if (down_sample) then
-            call s_read_data_files(q_cons_temp)
-            call s_upsample_data(q_cons_ts(1)%vf, q_cons_temp)
-            do i = 1, sys_size
-                $:GPU_UPDATE(device='[q_cons_ts(1)%vf(i)%sf]')
-            end do
-            do i = 1, sys_size
-                deallocate (q_cons_temp(i)%sf)
-            end do
-            deallocate (q_cons_temp)
+            !call s_read_data_files(q_cons_temp)
+            !call s_upsample_data(q_cons_ts(1)%vf, q_cons_temp)
+            !do i = 1, sys_size
+                !$:GPU_UPDATE(device='[q_cons_ts(1)%vf(i)%sf]')
+            !end do
+            !do i = 1, sys_size
+                !deallocate (q_cons_temp(i)%sf)
+            !end do
+            !deallocate (q_cons_temp)
         else
-            call s_read_data_files(q_cons_ts(1)%vf)
+            call s_read_data_files(t_step_dir, q_cons_ts(1)%vf, pb_ts(1), mv_ts(1), ib_markers, bc_type)
         end if
 
         ! Populating the buffers of the grid variables using the boundary conditions

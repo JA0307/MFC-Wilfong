@@ -50,6 +50,10 @@ module m_start_up
 
     use m_chemistry
 
+    use m_serial_read
+
+    use m_parallel_io
+
 #ifdef MFC_MPI
     use mpi                    !< Message passing interface (MPI) module
 #endif
@@ -71,7 +75,39 @@ module m_start_up
     integer, dimension(2) :: cart2d12_coords, cart2d13_coords
     integer :: proc_rank12, proc_rank13
 
+    character(LEN=path_len + name_len) :: proc_rank_dir !<
+    !! Location of the folder associated with the rank of the local processor
+    character(LEN=path_len + 2*name_len), private :: t_step_dir !<
+    !! Possible location of time-step folder containing preexisting grid and/or
+    !! conservative variables data to be used as starting point for pre-process
+
 contains
+
+        !> Read data files. Dispatch subroutine that replaces procedure pointer.
+        !! @param q_cons_vf Conservative variables
+    impure subroutine s_read_data_files(t_step_dir, t_step, q_cons_vf, ib_markers, bc_type)
+
+        character(len=*), intent(inout) :: t_step_dir
+        integer, intent(inout) :: t_step
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf
+        type(integer_field), intent(inout) :: ib_markers
+        type(integer_field), dimension(1:num_dims, -1:1), intent(inout) :: bc_type
+
+        if (parallel_io) then
+            !call s_read_parallel_grid_data_files(t_step_dir)
+            !call s_read_parallel_data_files(q_cons_vf)
+        else
+            write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
+            proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
+
+            write (t_step_dir, '(A,I0)') '/', t_step
+            t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
+
+            call s_read_serial_grid_binary(t_step_dir)
+            call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, bc_type=bc_type)
+        end if
+
+    end subroutine s_read_data_files
 
     !>  Reads the configuration file post_process.inp, in order
         !!      to populate parameters in module m_global_parameters.f90
@@ -218,7 +254,7 @@ contains
         end if
 
         ! Populating the grid and conservative variables
-        call s_read_data_files(t_step)
+        call s_read_data_files(t_step_dir, t_step, q_cons_vf, ib_markers, bc_type)
 
         ! Populating the buffer regions of the grid and conservative variables
         if (buff_size > 0) then
@@ -987,13 +1023,6 @@ contains
         call s_initialize_derived_variables_module()
         call s_initialize_data_output_module()
 
-        ! Associate pointers for serial or parallel I/O
-        if (parallel_io .neqv. .true.) then
-            s_read_data_files => s_read_serial_data_files
-        else
-            s_read_data_files => s_read_parallel_data_files
-        end if
-
 #ifdef MFC_MPI
         if (fft_wrt) then
 
@@ -1170,7 +1199,6 @@ contains
 
     impure subroutine s_finalize_modules
         ! Disassociate pointers for serial and parallel I/O
-        s_read_data_files => null()
 
 !        if (sim_data .and. proc_rank == 0) then
 !            call s_close_intf_data_file()

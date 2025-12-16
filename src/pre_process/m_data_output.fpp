@@ -37,56 +37,14 @@ module m_data_output
 
     use m_helper
 
-    use m_serial_io
-
     implicit none
 
-    private; 
-    public :: s_write_serial_data_files, &
-              s_write_parallel_data_files, &
-              s_write_data_files, &
+    private;
+    public :: s_write_parallel_data_files, &
               s_initialize_data_output_module, &
               s_finalize_data_output_module
 
     type(scalar_field), allocatable, dimension(:) :: q_cons_temp
-
-    abstract interface
-
-        !>  Interface for the conservative data
-        !! @param q_cons_vf Conservative variables
-        !! @param ib_markers track if a cell is within the immersed boundary
-        !! @param levelset closest distance from every cell to the IB
-        !! @param levelset_norm normalized vector from every cell to the closest point to the IB
-        impure subroutine s_write_abstract_data_files(q_cons_vf, q_prim_vf, bc_type, t_step_dir, ib_markers, levelset, levelset_norm)
-
-            import :: scalar_field, integer_field, sys_size, m, n, p, &
-                pres_field, levelset_field, levelset_norm_field, num_dims
-
-            ! Conservative variables
-            type(scalar_field), &
-                dimension(sys_size), &
-                intent(inout) :: q_cons_vf, q_prim_vf
-
-            type(integer_field), &
-                dimension(1:num_dims, -1:1), &
-                intent(in) :: bc_type
-
-            character(len=*) :: t_step_dir
-
-            ! IB markers
-            type(integer_field), &
-                intent(in), optional :: ib_markers
-
-            ! Levelset
-            type(levelset_field), &
-                intent(IN), optional :: levelset
-
-            ! Levelset Norm
-            type(levelset_norm_field), &
-                intent(IN), optional :: levelset_norm
-
-        end subroutine s_write_abstract_data_files
-    end interface
 
     character(LEN=path_len + 2*name_len), private :: t_step_dir !<
     !! Time-step folder into which grid and initial condition data will be placed
@@ -94,7 +52,6 @@ module m_data_output
     character(LEN=path_len + 2*name_len), public :: restart_dir !<
     !! Restart data folder
 
-    procedure(s_write_abstract_data_files), pointer :: s_write_data_files => null()
 
 contains
 
@@ -104,30 +61,16 @@ contains
         !! @param ib_markers track if a cell is within the immersed boundary
         !! @param levelset closest distance from every cell to the IB
         !! @param levelset_norm normalized vector from every cell to the closest point to the IB
-    impure subroutine s_write_parallel_data_files(q_cons_vf, q_prim_vf, bc_type, t_step_dir, ib_markers, levelset, levelset_norm)
+    impure subroutine s_write_parallel_data_files(q_cons_vf, q_prim_vf, bc_type, t_step_dir, pb, mv, ib_markers, levelset, levelset_norm)
 
         ! Conservative variables
-        type(scalar_field), &
-            dimension(sys_size), &
-            intent(inout) :: q_cons_vf, q_prim_vf
-
-        type(integer_field), &
-            dimension(1:num_dims, -1:1), &
-            intent(in) :: bc_type
-
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf, q_prim_vf
+        type(integer_field), dimension(1:num_dims, -1:1), intent(in) :: bc_type
         character(len=*) :: t_step_dir
-
-        ! IB markers
-        type(integer_field), &
-            intent(in), optional :: ib_markers
-
-        ! Levelset
-        type(levelset_field), &
-            intent(IN), optional :: levelset
-
-        ! Levelset Norm
-        type(levelset_norm_field), &
-            intent(IN), optional :: levelset_norm
+        type(pres_field), intent(in) :: pb, mv
+        type(integer_field), intent(in) :: ib_markers
+        type(levelset_field), intent(IN) :: levelset
+        type(levelset_norm_field), intent(IN) :: levelset_norm
 
 #ifdef MFC_MPI
 
@@ -503,7 +446,6 @@ contains
 
             end if
 
-            s_write_data_files => s_write_serial_data_files
         else
             write (restart_dir, '(A)') '/restart_data'
             restart_dir = trim(case_dir)//trim(restart_dir)
@@ -518,8 +460,6 @@ contains
             end if
 
             call s_mpi_barrier()
-
-            s_write_data_files => s_write_parallel_data_files
 
         end if
 
@@ -579,8 +519,6 @@ contains
     impure subroutine s_finalize_data_output_module
 
         integer :: i
-
-        s_write_data_files => null()
 
         if (down_sample) then
             do i = 1, sys_size

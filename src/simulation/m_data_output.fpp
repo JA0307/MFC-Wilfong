@@ -34,6 +34,8 @@ module m_data_output
 
     use m_boundary_common
 
+    use m_serial_write
+
     implicit none
 
     private; 
@@ -42,8 +44,6 @@ module m_data_output
               s_open_com_files, &
               s_open_probe_files, &
               s_write_run_time_information, &
-              s_write_data_files, &
-              s_write_serial_data_files, &
               s_write_parallel_data_files, &
               s_write_com_files, &
               s_write_probe_files, &
@@ -77,40 +77,6 @@ module m_data_output
     type(scalar_field), allocatable, dimension(:) :: q_cons_temp_ds
 
 contains
-
-    !> Write data files. Dispatch subroutine that replaces procedure pointer.
-        !! @param q_cons_vf Conservative variables
-        !! @param q_prim_vf Primitive variables
-        !! @param t_step Current time step
-    impure subroutine s_write_data_files(q_cons_vf, q_T_sf, q_prim_vf, t_step, bc_type, beta)
-
-        type(scalar_field), &
-            dimension(sys_size), &
-            intent(inout) :: q_cons_vf
-
-        type(scalar_field), &
-            intent(inout) :: q_T_sf
-
-        type(scalar_field), &
-            dimension(sys_size), &
-            intent(inout) :: q_prim_vf
-
-        integer, intent(in) :: t_step
-
-        type(scalar_field), &
-            intent(inout), optional :: beta
-
-        type(integer_field), &
-            dimension(1:num_dims, -1:1), &
-            intent(in) :: bc_type
-
-        if (.not. parallel_io) then
-            call s_write_serial_data_files(q_cons_vf, q_T_sf, q_prim_vf, t_step, bc_type, beta)
-        else
-            call s_write_parallel_data_files(q_cons_vf, t_step, bc_type, beta)
-        end if
-
-    end subroutine s_write_data_files
 
     !>  The purpose of this subroutine is to open a new or pre-
         !!          existing run-time information file and append to it the
@@ -384,6 +350,7 @@ contains
 
     end subroutine s_write_run_time_information
 
+#if 0
     !>  The goal of this subroutine is to output the grid and
         !!      conservative variables data files for given time-step.
         !!  @param q_cons_vf Cell-average conservative variables
@@ -412,100 +379,6 @@ contains
         integer :: i, j, k, l, r
 
         real(wp) :: gamma, lit_gamma, pi_inf, qv !< Temporary EOS params
-
-        ! Creating or overwriting the time-step root directory
-        write (t_step_dir, '(A,I0,A,I0)') trim(case_dir)//'/p_all'
-
-        ! Creating or overwriting the current time-step directory
-        write (t_step_dir, '(a,i0,a,i0)') trim(case_dir)//'/p_all/p', &
-            proc_rank, '/', t_step
-
-        file_path = trim(t_step_dir)//'/.'
-        call my_inquire(file_path, file_exist)
-        if (file_exist) call s_delete_directory(trim(t_step_dir))
-        call s_create_directory(trim(t_step_dir))
-
-        ! Writing the grid data file in the x-direction
-        file_path = trim(t_step_dir)//'/x_cb.dat'
-
-        open (2, FILE=trim(file_path), &
-              FORM='unformatted', &
-              STATUS='new')
-        write (2) x_cb(-1:m); close (2)
-
-        ! Writing the grid data files in the y- and z-directions
-        if (n > 0) then
-
-            file_path = trim(t_step_dir)//'/y_cb.dat'
-
-            open (2, FILE=trim(file_path), &
-                  FORM='unformatted', &
-                  STATUS='new')
-            write (2) y_cb(-1:n); close (2)
-
-            if (p > 0) then
-
-                file_path = trim(t_step_dir)//'/z_cb.dat'
-
-                open (2, FILE=trim(file_path), &
-                      FORM='unformatted', &
-                      STATUS='new')
-                write (2) z_cb(-1:p); close (2)
-
-            end if
-
-        end if
-
-        ! Writing the conservative variables data files
-        do i = 1, sys_size
-            write (file_path, '(A,I0,A)') trim(t_step_dir)//'/q_cons_vf', &
-                i, '.dat'
-
-            open (2, FILE=trim(file_path), &
-                  FORM='unformatted', &
-                  STATUS='new')
-
-            write (2) q_cons_vf(i)%sf(0:m, 0:n, 0:p); close (2)
-        end do
-
-        if (qbmm .and. .not. polytropic) then
-            do i = 1, nb
-                do r = 1, nnode
-                    write (file_path, '(A,I0,A)') trim(t_step_dir)//'/pb', &
-                        sys_size + (i - 1)*nnode + r, '.dat'
-
-                    open (2, FILE=trim(file_path), &
-                          FORM='unformatted', &
-                          STATUS='new')
-
-                    write (2) pb_ts(1)%sf(0:m, 0:n, 0:p, r, i); close (2)
-                end do
-            end do
-
-            do i = 1, nb
-                do r = 1, nnode
-                    write (file_path, '(A,I0,A)') trim(t_step_dir)//'/mv', &
-                        sys_size + (i - 1)*nnode + r, '.dat'
-
-                    open (2, FILE=trim(file_path), &
-                          FORM='unformatted', &
-                          STATUS='new')
-
-                    write (2) mv_ts(1)%sf(0:m, 0:n, 0:p, r, i); close (2)
-                end do
-            end do
-        end if
-
-        ! Writing the IB markers
-        if (ib) then
-            write (file_path, '(A,I0,A)') trim(t_step_dir)//'/ib.dat'
-
-            open (2, FILE=trim(file_path), &
-                  FORM='unformatted', &
-                  STATUS='new')
-
-            write (2) ib_markers%sf(0:m, 0:n, 0:p); close (2)
-        end if
 
         gamma = gammas(1)
         lit_gamma = gs_min(1)
@@ -779,6 +652,7 @@ contains
         end if
 
     end subroutine s_write_serial_data_files
+#endif
 
     !>  The goal of this subroutine is to output the grid and
         !!      conservative variables data files for given time-step.

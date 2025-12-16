@@ -58,16 +58,18 @@ module m_start_up
 
     use m_boundary_conditions
 
-    use m_serial_io
+    use m_serial_read
+
+    use m_serial_write
+
+    use m_parallel_io
 
     implicit none
 
     private;
     public :: s_read_input_file, &
               s_check_input_file, &
-              s_read_grid_data_files, &
-              s_read_ic_data_files, &
-              s_read_parallel_grid_data_files, &
+              s_read_data_files, &
               s_read_parallel_ic_data_files, &
               s_check_grid_data_files, &
               s_initialize_modules, &
@@ -76,44 +78,90 @@ module m_start_up
               s_apply_initial_condition, &
               s_save_data, s_read_grid
 
-    abstract interface
-
-        impure subroutine s_read_abstract_grid_data_files(t_step_dir)
-
-            character(len=*), intent(in) :: t_step_dir
-
-        end subroutine s_read_abstract_grid_data_files
-
-        !! @param q_cons_vf Conservative variables
-        !! @param ib_markers track if a cell is within the immersed boundary
-        impure subroutine s_read_abstract_ic_data_files(t_step_dir, q_cons_vf_in, ib_markers_in)
-
-            import :: scalar_field, integer_field, sys_size, pres_field
-
-            character(len=*), intent(in) :: t_step_dir
-
-            type(scalar_field), &
-                dimension(sys_size), &
-                intent(inout) :: q_cons_vf_in
-
-            type(integer_field), &
-                intent(inout) :: ib_markers_in
-
-        end subroutine s_read_abstract_ic_data_files
-
-    end interface
-
-    character(LEN=path_len + name_len) :: proc_rank_dir !<
-    !! Location of the folder associated with the rank of the local processor
-
-    character(LEN=path_len + 2*name_len), private :: t_step_dir !<
-    !! Possible location of time-step folder containing preexisting grid and/or
-    !! conservative variables data to be used as starting point for pre-process
-
-    procedure(s_read_abstract_grid_data_files), pointer :: s_read_grid_data_files => null()
-    procedure(s_read_abstract_ic_data_files), pointer :: s_read_ic_data_files => null()
-
 contains
+
+    !> Read data files. Dispatch subroutine that replaces procedure pointer.
+        !! @param q_cons_vf Conservative variables
+    impure subroutine s_read_data_files(q_cons_vf, pb, mv, ib_markers)
+
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf
+        type(pres_field), intent(inout) :: pb, mv
+        type(integer_field), intent(inout) :: ib_markers
+
+        character(LEN=path_len + name_len) :: proc_rank_dir !<
+        !! Location of the folder associated with the rank of the local processor
+        character(LEN=path_len + 2*name_len) :: t_step_dir !<
+        !! Possible location of time-step folder containing preexisting grid and/or
+        !! conservative variables data to be used as starting point for pre-process
+
+        call s_read_grid(t_step_dir)
+
+        if (old_ic) then
+            if (parallel_io) then
+                write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
+                proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
+
+                write (t_step_dir, '(A,I0)') '/', t_step_start
+                t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
+                call s_read_parallel_ic_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+            else
+                !write (t_step_dir)
+                !call s_read_serial_data_files(t_step_dir, q_cons_vf, ib_markers, pb, mv)
+            end if
+        end if
+
+    end subroutine s_read_data_files
+
+    impure subroutine s_read_grid(step_dirpath)
+
+        character(len=*), intent(in) :: step_dirpath
+
+        if (old_grid) then
+            if (parallel_io) then
+                call s_read_parallel_grid_data_files()
+            else
+                call s_read_serial_grid_binary(step_dirpath)
+            end if
+            call s_check_grid_data_files(step_dirpath)
+        else
+            if (parallel_io) then
+                if (proc_rank == 0) call s_generate_parallel_grid()
+                call s_mpi_barrier()
+                call s_read_parallel_grid_data_files()
+                call s_check_grid_data_files(step_dirpath)
+            else
+                call s_generate_serial_grid()
+            end if
+        end if
+
+    end subroutine s_read_grid
+
+    impure subroutine s_write_data_files(q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
+
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf, q_prim_vf
+        type(integer_field), dimension(1:num_dims, -1:1), intent(in) :: bc_type
+        type(pres_field), intent(inout) :: pb, mv
+        type(integer_field), intent(inout) :: ib_markers
+
+        character(LEN=path_len + name_len) :: proc_rank_dir !<
+        !! Location of the folder associated with the rank of the local processor
+        character(LEN=path_len + 2*name_len) :: t_step_dir !<
+        !! Possible location of time-step folder containing preexisting grid and/or
+        !! conservative variables data to be used as starting point for pre-process
+
+        if (.not. parallel_io) then
+            write (proc_rank_dir, '(A,I0)') '/p_all/p', proc_rank
+            proc_rank_dir = trim(case_dir)//trim(proc_rank_dir)
+
+            write (t_step_dir, '(A,I0)') '/', t_step_start
+            t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
+
+            call s_write_serial_data_files(t_step_dir, t_step_start, q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
+        else
+            !call s_write_parallel_data_files(t_step_dir, q_cons_vf, pb, mv, ib_markers)
+        end if
+
+    end subroutine s_write_data_files
 
     !>  Reads the configuration file pre_process.inp, in order to
         !!      populate the parameters in module m_global_parameters.f90
@@ -240,124 +288,26 @@ contains
         !!      at the (non-)uniform cell-width distributions for all the
         !!      active coordinate directions and making sure that all of
         !!      the cell-widths are positively valued
-    impure subroutine s_check_grid_data_files
+    impure subroutine s_check_grid_data_files(step_dirpath)
+
+        character(len=*), intent(in) :: step_dirpath
 
         ! Cell-boundary Data Consistency Check in x-direction
         #:for VAR, XYZ in [('m', 'x'), ('n', 'y'), ('p', 'z')]
             if (${VAR}$ > 0) then
                 if (any(${XYZ}$_cb(0:m) - ${XYZ}$_cb(-1:m - 1) <= 0._wp)) then
-                    call s_mpi_abort('x_cb.dat in '//trim(t_step_dir)// &
-                                     ' contains non-positive cell-spacings. Exiting.')
+                    if (parallel_io) then
+                        call s_mpi_abort('lustre_${XYZ}$.dat in '//trim(step_dirpath)// &
+                                         ' contains non-positive cell-spacings. Exiting.')
+                    else
+                        call s_mpi_abort('${XYZ}$_cb.dat in '//trim(step_dirpath)// &
+                                         ' contains non-positive cell-spacings. Exiting.')
+                    end if
                 end if
             end if
         #:endfor
 
     end subroutine s_check_grid_data_files
-
-    !> Cell-boundary data are checked for consistency by looking
-        !!      at the (non-)uniform cell-width distributions for all the
-        !!      active coordinate directions and making sure that all of
-        !!      the cell-widths are positively valued
-    impure subroutine s_read_parallel_grid_data_files(step_dirpath)
-
-        character(len=*), intent(in) :: step_dirpath
-
-#ifdef MFC_MPI
-
-        real(wp), allocatable, dimension(:) :: x_cb_glb, y_cb_glb, z_cb_glb
-
-        integer :: ifile, ierr, data_size
-        integer, dimension(MPI_STATUS_SIZE) :: status
-
-        character(LEN=path_len + 2*name_len) :: file_loc
-        logical :: file_exist
-
-        allocate (x_cb_glb(-1:m_glb))
-        allocate (y_cb_glb(-1:n_glb))
-        allocate (z_cb_glb(-1:p_glb))
-
-        ! Read in cell boundary locations in x-direction
-        file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'x_cb.dat'
-        inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-        if (file_exist) then
-            data_size = m_glb + 2
-            call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-            call MPI_FILE_READ_ALL(ifile, x_cb_glb, data_size, mpi_p, status, ierr)
-            call MPI_FILE_CLOSE(ifile, ierr)
-        else
-            call s_mpi_abort('File '//trim(file_loc)//' is missing. Exiting. ')
-        end if
-
-        ! Assigning local cell boundary locations
-        x_cb(-1:m) = x_cb_glb((start_idx(1) - 1):(start_idx(1) + m))
-        ! Computing cell center locations
-        x_cc(0:m) = (x_cb(0:m) + x_cb(-1:(m - 1)))/2._wp
-        ! Computing minimum cell width
-        dx = minval(x_cb(0:m) - x_cb(-1:(m - 1)))
-        if (num_procs > 1) call s_mpi_reduce_min(dx)
-        ! Setting locations of domain bounds
-        x_domain%beg = x_cb(-1)
-        x_domain%end = x_cb(m)
-
-        if (n > 0) then
-            ! Read in cell boundary locations in y-direction
-            file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'y_cb.dat'
-            inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-            if (file_exist) then
-                data_size = n_glb + 2
-                call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-                call MPI_FILE_READ_ALL(ifile, y_cb_glb, data_size, mpi_p, status, ierr)
-                call MPI_FILE_CLOSE(ifile, ierr)
-            else
-                call s_mpi_abort('File '//trim(file_loc)//' is missing. Exiting. ')
-            end if
-
-            ! Assigning local cell boundary locations
-            y_cb(-1:n) = y_cb_glb((start_idx(2) - 1):(start_idx(2) + n))
-            ! Computing cell center locations
-            y_cc(0:n) = (y_cb(0:n) + y_cb(-1:(n - 1)))/2._wp
-            ! Computing minimum cell width
-            dy = minval(y_cb(0:n) - y_cb(-1:(n - 1)))
-            if (num_procs > 1) call s_mpi_reduce_min(dy)
-            ! Setting locations of domain bounds
-            y_domain%beg = y_cb(-1)
-            y_domain%end = y_cb(n)
-
-            if (p > 0) then
-                ! Read in cell boundary locations in z-direction
-                file_loc = trim(case_dir)//'/restart_data'//trim(mpiiofs)//'z_cb.dat'
-                inquire (FILE=trim(file_loc), EXIST=file_exist)
-
-                if (file_exist) then
-                    data_size = p_glb + 2
-                    call MPI_FILE_OPEN(MPI_COMM_WORLD, file_loc, MPI_MODE_RDONLY, mpi_info_int, ifile, ierr)
-                    call MPI_FILE_READ_ALL(ifile, z_cb_glb, data_size, mpi_p, status, ierr)
-                    call MPI_FILE_CLOSE(ifile, ierr)
-                else
-                    call s_mpi_abort('File '//trim(file_loc)//' is missing. Exiting. ')
-                end if
-
-                ! Assigning local cell boundary locations
-                z_cb(-1:p) = z_cb_glb((start_idx(3) - 1):(start_idx(3) + p))
-                ! Computing cell center locations
-                z_cc(0:p) = (z_cb(0:p) + z_cb(-1:(p - 1)))/2._wp
-                ! Computing minimum cell width
-                dz = minval(z_cb(0:p) - z_cb(-1:(p - 1)))
-                if (num_procs > 1) call s_mpi_reduce_min(dz)
-                ! Setting locations of domain bounds
-                z_domain%beg = z_cb(-1)
-                z_domain%end = z_cb(p)
-
-            end if
-        end if
-
-        deallocate (x_cb_glb, y_cb_glb, z_cb_glb)
-
-#endif
-
-    end subroutine s_read_parallel_grid_data_files
 
     !> The goal of this subroutine is to read in any preexisting
         !!      initial condition data files so that they may be used by
@@ -365,16 +315,12 @@ contains
         !!      all new initial condition.
         !! @param q_cons_vf Conservative variables
         !! @param ib_markers track if a cell is within the immersed boundary
-    impure subroutine s_read_parallel_ic_data_files(step_dirpath, q_cons_vf_in, ib_markers_in)
+    impure subroutine s_read_parallel_ic_data_files(step_dirpath, q_cons_vf_in, pb_in, mv_in, ib_markers_in)
 
         character(len=*), intent(in) :: step_dirpath
-
-        type(scalar_field), &
-            dimension(sys_size), &
-            intent(inout) :: q_cons_vf_in
-
-        type(integer_field), &
-            intent(inout) :: ib_markers_in
+        type(scalar_field), dimension(sys_size), intent(inout) :: q_cons_vf_in
+        type(pres_field), intent(inout) :: pb_in, mv_in
+        type(integer_field), intent(inout) :: ib_markers_in
 
 #ifdef MFC_MPI
 
@@ -507,7 +453,6 @@ contains
         call s_initialize_mpi_common_module()
         call s_initialize_data_output_module()
         call s_initialize_variables_conversion_module()
-        call s_initialize_grid_module()
         call s_initialize_initial_condition_module()
         call s_initialize_perturbation_module()
         call s_initialize_assign_variables_module()
@@ -518,41 +463,7 @@ contains
         ! the serial data files
         call s_create_directory('D')
 
-        ! Associate pointers for serial or parallel I/O
-        if (parallel_io .neqv. .true.) then
-            s_generate_grid => s_generate_serial_grid
-            s_read_grid_data_files => s_read_serial_grid_binary
-            s_read_ic_data_files => s_read_serial_data_files
-            s_write_data_files => s_write_serial_data_files
-        else
-            s_generate_grid => s_generate_parallel_grid
-            s_read_grid_data_files => s_read_parallel_grid_data_files
-            s_read_ic_data_files => s_read_parallel_ic_data_files
-            s_write_data_files => s_write_parallel_data_files
-        end if
-
     end subroutine s_initialize_modules
-
-    impure subroutine s_read_grid()
-
-        write (t_step_dir, '(A,I0)') '/', t_step_start
-        t_step_dir = trim(proc_rank_dir)//trim(t_step_dir)
-
-        if (old_grid) then
-            call s_read_grid_data_files(t_step_dir)
-            call s_check_grid_data_files()
-        else
-            if (parallel_io .neqv. .true.) then
-                call s_generate_grid()
-            else
-                if (proc_rank == 0) call s_generate_grid()
-                call s_mpi_barrier()
-                call s_read_grid_data_files(t_step_dir)
-                call s_check_grid_data_files()
-            end if
-        end if
-
-    end subroutine s_read_grid
 
     impure subroutine s_apply_initial_condition(start, finish)
 
@@ -570,7 +481,7 @@ contains
         ! Setting up grid and initial condition
         call cpu_time(start)
 
-        if (old_ic) call s_read_ic_data_files(t_step_dir, q_cons_vf, ib_markers)
+        call s_read_data_files(q_cons_vf, pb, mv, ib_markers)
 
         call s_generate_initial_condition()
 
@@ -583,13 +494,10 @@ contains
             call s_infinite_relaxation_k(q_cons_vf)
         end if
 
-        if (ib) then
-            call s_write_data_files(q_cons_vf, q_prim_vf, bc_type, t_step_dir, ib_markers, levelset, levelset_norm)
-        else
-            call s_write_data_files(q_cons_vf, q_prim_vf, bc_type, t_step_dir)
-        end if
+        call s_write_data_files(q_cons_vf, q_prim_vf, bc_type, pb, mv, ib_markers)
 
         call cpu_time(finish)
+
     end subroutine s_apply_initial_condition
 
     impure subroutine s_save_data(proc_time, time_avg, time_final, file_exists)
@@ -653,15 +561,9 @@ contains
     end subroutine s_initialize_mpi_domain
 
     impure subroutine s_finalize_modules
-        ! Disassociate pointers for serial and parallel I/O
-        s_generate_grid => null()
-        s_read_grid_data_files => null()
-        s_read_ic_data_files => null()
-        s_write_data_files => null()
 
         ! Deallocation procedures for the modules
         call s_finalize_mpi_common_module()
-        call s_finalize_grid_module()
         call s_finalize_variables_conversion_module()
         call s_finalize_data_output_module()
         call s_finalize_global_parameters_module()

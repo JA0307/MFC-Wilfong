@@ -1680,24 +1680,16 @@ contains
 #endif
     end subroutine s_create_mpi_types
 
-    subroutine s_write_serial_boundary_condition_files(q_prim_vf, bc_type, step_dirpath, old_grid_in)
+    subroutine s_write_serial_boundary_condition_files(q_prim_vf, bc_type, step_dirpath, status)
 
         type(scalar_field), dimension(sys_size), intent(in) :: q_prim_vf
         type(integer_field), dimension(1:num_dims, 1:2), intent(in) :: bc_type
-        logical, intent(in) :: old_grid_in
+        character(len=3), intent(in) :: status
 
         character(LEN=*), intent(in) :: step_dirpath
 
         integer :: dir, loc, i
         character(len=path_len) :: file_path
-
-        character(len=10) :: status
-
-        if (old_grid_in) then
-            status = 'old'
-        else
-            status = 'new'
-        end if
 
         call s_pack_boundary_condition_buffers(q_prim_vf)
 

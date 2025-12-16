@@ -24,8 +24,6 @@ program p_main
 
     call s_initialize_modules()
 
-    call s_read_grid()
-
     allocate (proc_time(0:num_procs - 1))
 
     call s_apply_initial_condition(start, finish)

@@ -28,24 +28,8 @@ module m_data_input
     implicit none
 
     private; public :: s_initialize_data_input_module, &
- s_read_data_files, &
- s_read_serial_data_files, &
  s_read_parallel_data_files, &
  s_finalize_data_input_module
-
-    abstract interface
-
-        !> Subroutine for reading data files
-        !!  @param t_step Current time-step to input
-        impure subroutine s_read_abstract_data_files(t_step)
-
-            implicit none
-
-            integer, intent(in) :: t_step
-
-        end subroutine s_read_abstract_data_files
-
-    end interface
 
     type(scalar_field), allocatable, dimension(:), public :: q_cons_vf !<
     !! Conservative variables
@@ -64,51 +48,7 @@ module m_data_input
     ! type(scalar_field), public :: ib_markers !<
     type(integer_field), public :: ib_markers
 
-    procedure(s_read_abstract_data_files), pointer :: s_read_data_files => null()
-
 contains
-
-    !> Helper subroutine to read grid data files for a given direction
-    !!  @param t_step_dir Directory containing the time-step data
-    !!  @param direction Direction name ('x', 'y', 'z')
-    !!  @param cb_array Cell boundary array to populate
-    !!  @param d_array Cell width array to populate
-    !!  @param cc_array Cell center array to populate
-    !!  @param size_dim Size of the dimension
-    impure subroutine s_read_grid_data_direction(t_step_dir, direction, cb_array, d_array, cc_array, size_dim)
-
-        character(len=*), intent(in) :: t_step_dir
-        character(len=1), intent(in) :: direction
-        real(wp), dimension(-1:), intent(out) :: cb_array
-        real(wp), dimension(0:), intent(out) :: d_array
-        real(wp), dimension(0:), intent(out) :: cc_array
-        integer, intent(in) :: size_dim
-
-        character(LEN=len_trim(t_step_dir) + 10) :: file_loc
-        logical :: file_check
-
-        ! Checking whether direction_cb.dat exists
-        file_loc = trim(t_step_dir)//'/'//direction//'_cb.dat'
-        inquire (FILE=trim(file_loc), EXIST=file_check)
-
-        ! Reading direction_cb.dat if it exists, exiting otherwise
-        if (file_check) then
-            open (1, FILE=trim(file_loc), FORM='unformatted', &
-                  STATUS='old', ACTION='read')
-            read (1) cb_array(-1:size_dim)
-            close (1)
-        else
-            call s_mpi_abort('File '//direction//'_cb.dat is missing in '// &
-                             trim(t_step_dir)//'. Exiting.')
-        end if
-
-        ! Computing the cell-width distribution
-        d_array(0:size_dim) = cb_array(0:size_dim) - cb_array(-1:size_dim - 1)
-
-        ! Computing the cell-center locations
-        cc_array(0:size_dim) = cb_array(-1:size_dim - 1) + d_array(0:size_dim)/2._wp
-
-    end subroutine s_read_grid_data_direction
 
 #ifdef MFC_MPI
     !> Helper subroutine to setup MPI data I/O parameters
@@ -232,98 +172,6 @@ contains
         end if
 
     end subroutine s_allocate_field_arrays
-
-    !>  This subroutine is called at each time-step that has to
-        !!      be post-processed in order to read the raw data files
-        !!      present in the corresponding time-step directory and to
-        !!      populate the associated grid and conservative variables.
-        !!  @param t_step Current time-step
-    impure subroutine s_read_serial_data_files(t_step)
-
-        integer, intent(in) :: t_step
-
-        character(LEN=len_trim(case_dir) + 2*name_len) :: t_step_dir !<
-            !! Location of the time-step directory associated with t_step
-
-        character(LEN=len_trim(case_dir) + 3*name_len) :: file_loc !<
-            !! Generic string used to store the location of a particular file
-
-        character(LEN= &
-                  int(floor(log10(real(sys_size, wp)))) + 1) :: file_num !<
-            !! Used to store the variable position, in character form, of the
-            !! currently manipulated conservative variable file
-
-        character(LEN=len_trim(case_dir) + 2*name_len) :: t_step_ib_dir !<
-        !! Location of the time-step directory associated with t_step
-
-        logical :: dir_check !<
-            !! Generic logical used to test the existence of a particular folder
-
-        logical :: file_check  !<
-            !! Generic logical used to test the existence of a particular file
-
-        integer :: i !< Generic loop iterator
-
-        ! Setting location of time-step folder based on current time-step
-        write (t_step_dir, '(A,I0,A,I0)') '/p_all/p', proc_rank, '/', t_step
-        t_step_dir = trim(case_dir)//trim(t_step_dir)
-
-        ! Inquiring as to the existence of the time-step directory
-        file_loc = trim(t_step_dir)//'/.'
-        call my_inquire(file_loc, dir_check)
-
-        ! If the time-step directory is missing, the post-process exits.
-        if (dir_check .neqv. .true.) then
-            call s_mpi_abort('Time-step folder '//trim(t_step_dir)// &
-                             ' is missing. Exiting.')
-        end if
-
-        if (bc_io) then
-            call s_read_serial_boundary_condition_files(t_step_dir, bc_type)
-        else
-            call s_assign_default_bc_type(bc_type)
-        end if
-
-        ! Reading the Grid Data Files using helper subroutine
-        call s_read_grid_data_direction(t_step_dir, 'x', x_cb, dx, x_cc, m)
-
-        if (n > 0) then
-            call s_read_grid_data_direction(t_step_dir, 'y', y_cb, dy, y_cc, n)
-
-            if (p > 0) then
-                call s_read_grid_data_direction(t_step_dir, 'z', z_cb, dz, z_cc, p)
-            end if
-        end if
-
-        ! Reading the Conservative Variables Data Files
-        do i = 1, sys_size
-
-            ! Checking whether the data file associated with the variable
-            ! position of currently manipulated conservative variable exists
-            write (file_num, '(I0)') i
-            file_loc = trim(t_step_dir)//'/q_cons_vf'// &
-                       trim(file_num)//'.dat'
-            inquire (FILE=trim(file_loc), EXIST=file_check)
-
-            ! Reading the data file if it exists, exiting otherwise
-            if (file_check) then
-                open (1, FILE=trim(file_loc), FORM='unformatted', &
-                      STATUS='old', ACTION='read')
-                read (1) q_cons_vf(i)%sf(0:m, 0:n, 0:p)
-                close (1)
-                print *, q_cons_vf(i)%sf(:, 0, 0)
-            else
-                call s_mpi_abort('File q_cons_vf'//trim(file_num)// &
-                                 '.dat is missing in '//trim(t_step_dir)// &
-                                 '. Exiting.')
-            end if
-
-        end do
-
-        ! Reading IB data using helper subroutine
-        call s_read_ib_data_files(t_step_dir)
-
-    end subroutine s_read_serial_data_files
 
     !>  This subroutine is called at each time-step that has to
         !!      be post-processed in order to parallel-read the raw data files
@@ -635,12 +483,6 @@ contains
             end if
         end if
 
-        if (parallel_io .neqv. .true.) then
-            s_read_data_files => s_read_serial_data_files
-        else
-            s_read_data_files => s_read_parallel_data_files
-        end if
-
     end subroutine s_initialize_data_input_module
 
     !> Deallocation procedures for the module
@@ -678,8 +520,6 @@ contains
         end if
 
         deallocate (bc_type)
-
-        s_read_data_files => null()
 
     end subroutine s_finalize_data_input_module
 
