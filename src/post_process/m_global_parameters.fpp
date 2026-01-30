@@ -211,6 +211,9 @@ module m_global_parameters
     ! Subgrid Bubble Parameters
     type(subgrid_bubble_physical_parameters) :: bub_pp
 
+    ! Subgrid Particle Parameters
+    type(subgrid_particle_physical_parameters) :: particle_pp
+
     real(wp), allocatable, dimension(:) :: adv !< Advection variables
 
     ! Formatted Database File(s) Structure Parameters
@@ -332,6 +335,11 @@ module m_global_parameters
     integer :: nmom
     !> @}
 
+    !> @name Particle modeling variables and parameters
+    !> @{
+    real(wp) :: cp_particle, rho0ref_particle
+    !> @}
+
     !> @name surface tension coefficient
     !> @{
 
@@ -354,6 +362,7 @@ module m_global_parameters
     !> @name Lagrangian bubbles
     !> @{
     logical :: bubbles_lagrange
+    logical :: particles_lagrange
     !> @}
 
     real(wp) :: Bx0 !< Constant magnetic field in the x-direction (1D)
@@ -461,6 +470,10 @@ contains
         bub_pp%R_v = dflt_real; R_v = dflt_real
         bub_pp%R_g = dflt_real; R_g = dflt_real
 
+        ! Subgrid particle parameters
+        particle_pp%rho0ref_particle = dflt_real
+        particle_pp%cp_particle = dflt_real
+
         ! Formatted database file(s) structure parameters
         format = dflt_int
 
@@ -538,6 +551,7 @@ contains
 
         ! Lagrangian bubbles modeling
         bubbles_lagrange = .false.
+        particles_lagrange = .false.
 
         ! IBM
         num_ibs = dflt_int
@@ -804,6 +818,11 @@ contains
             end if
 
             if (bubbles_lagrange) then
+                beta_idx = sys_size + 1
+                sys_size = beta_idx
+            end if
+
+            if (particles_lagrange) then
                 beta_idx = sys_size + 1
                 sys_size = beta_idx
             end if

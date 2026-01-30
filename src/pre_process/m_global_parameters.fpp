@@ -177,6 +177,7 @@ module m_global_parameters
 
     logical :: viscous
     logical :: bubbles_lagrange
+    logical :: particles_lagrange
 
     ! Perturb density of surrounding air so as to break symmetry of grid
     logical :: perturb_flow
@@ -238,6 +239,8 @@ module m_global_parameters
     ! Subgrid Bubble Parameters
     type(subgrid_bubble_physical_parameters) :: bub_pp
 
+    type(subgrid_particle_physical_parameters) :: particle_pp
+
     real(wp) :: rhoref, pref !< Reference parameters for Tait EOS
 
     type(chemistry_parameters) :: chem_params
@@ -286,6 +289,9 @@ module m_global_parameters
 
     real(wp) :: R0ref, p0ref, rho0ref, T0ref, ss, pv, vd, mu_l, mu_v, mu_g, &
                 gam_v, gam_g, M_v, M_g, cp_v, cp_g, R_v, R_g
+
+    !Solid particle physical paramters
+    real(wp) :: cp_particle, rho0ref_particle
 
     !> @}
 
@@ -432,6 +438,8 @@ contains
         elliptic_smoothing_iters = dflt_int
         elliptic_smoothing = .false.
 
+        particles_lagrange = .false.
+
         fft_wrt = .false.
 
         simplex_perturb = .false.
@@ -461,6 +469,9 @@ contains
         lag_params%epsilonb = 1._wp
         lag_params%charwidth = dflt_real
         lag_params%valmaxvoid = dflt_real
+        lag_params%nParticles_glb = dflt_int
+        lag_params%qs_drag_model = dflt_int
+        lag_params%stokes_drag = dflt_int
 
         do i = 1, num_patches_max
             patch_icpp(i)%geometry = dflt_int
@@ -657,6 +668,10 @@ contains
         bub_pp%cp_g = dflt_real; cp_g = dflt_real
         bub_pp%R_v = dflt_real; R_v = dflt_real
         bub_pp%R_g = dflt_real; R_g = dflt_real
+
+        ! Subgrid particle parameters
+        particle_pp%rho0ref_particle = dflt_real
+        particle_pp%cp_particle = dflt_real
 
     end subroutine s_assign_default_values_to_user_inputs
 
@@ -958,7 +973,7 @@ contains
                                            igr_order, buff_size, &
                                            idwint, idwbuff, viscous, &
                                            bubbles_lagrange, m, n, p, &
-                                           num_dims, igr, ib, fd_number)
+                                           num_dims, igr, ib, fd_number, particles_lagrange)
 
 #ifdef MFC_MPI
 
