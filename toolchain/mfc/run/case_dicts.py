@@ -103,6 +103,7 @@ PRE_PROCESS.update({
     'elliptic_smoothing_iters': ParamType.INT,
     'viscous': ParamType.LOG,
     'bubbles_lagrange': ParamType.LOG,
+    'particles_lagrange': ParamType.LOG,
     'fd_order': ParamType.INT,
     'simplex_perturb': ParamType.LOG,
     'fft_wrt': ParamType.LOG,
@@ -117,6 +118,9 @@ for var in ["R0ref", "p0ref", "rho0ref", "T0ref", "ss", "pv", "vd",
             "mu_l", "mu_v", "mu_g", "gam_v", "gam_g",
             "M_v", "M_g", "k_v", "k_g", "cp_v", "cp_g", "R_v", "R_g" ]:
     PRE_PROCESS[f"bub_pp%{var}"] = ParamType.REAL
+
+for var in ["rho0ref_particle","cp_particle"]:
+    PRE_PROCESS[f"particle_pp%{var}"] = ParamType.REAL
 
 for ib_id in range(1, 10+1):
     for real_attr, ty in [("geometry", ParamType.INT), ("radius", ParamType.REAL),
@@ -324,6 +328,7 @@ SIMULATION.update({
     'surface_tension': ParamType.LOG,
     'viscous': ParamType.LOG,
     'bubbles_lagrange': ParamType.LOG,
+    'particles_lagrange': ParamType.LOG,
     'num_bc_patches': ParamType.INT,
     'powell': ParamType.LOG,
     'tau_star': ParamType.REAL,
@@ -352,7 +357,7 @@ for var in [ 'heatTransfer_model', 'massTransfer_model', 'pressure_corrector',
     SIMULATION[f'lag_params%{var}'] = ParamType.LOG
 
 for var in [ 'solver_approach', 'cluster_type', 'smooth_type', 'nBubs_glb',
-             'vel_model', 'drag_model']:
+             'vel_model', 'drag_model', 'nParticles_glb', 'qs_drag_model', 'stokes_drag']:
     SIMULATION[f'lag_params%{var}'] = ParamType.INT
 
 for var in [ 'epsilonb', 'valmaxvoid', 'charwidth']:
@@ -370,6 +375,9 @@ for var in ["R0ref", "p0ref", "rho0ref", "T0ref", "ss", "pv", "vd",
             "mu_l", "mu_v", "mu_g", "gam_v", "gam_g",
             "M_v", "M_g", "k_v", "k_g", "cp_v", "cp_g", "R_v", "R_g" ]:
     SIMULATION[f"bub_pp%{var}"] = ParamType.REAL
+
+for var in ["rho0ref_particle","cp_particle"]:
+    SIMULATION[f"particle_pp%{var}"] = ParamType.REAL
 
 for ib_id in range(1, 10+1):
     for real_attr, ty in [("geometry", ParamType.INT), ("radius", ParamType.REAL),
@@ -494,6 +502,7 @@ POST_PROCESS.update({
     'surface_tension': ParamType.LOG,
     'output_partial_domain': ParamType.LOG,
     'bubbles_lagrange': ParamType.LOG,
+    'particles_lagrange': ParamType.LOG,
     'lag_header': ParamType.LOG,
     'lag_txt_wrt': ParamType.LOG,
     'lag_db_wrt': ParamType.LOG,
@@ -518,6 +527,9 @@ for var in ["R0ref", "p0ref", "rho0ref", "T0ref", "ss", "pv", "vd",
             "mu_l", "mu_v", "mu_g", "gam_v", "gam_g",
             "M_v", "M_g", "k_v", "k_g", "cp_v", "cp_g", "R_v", "R_g" ]:
     POST_PROCESS[f"bub_pp%{var}"] = ParamType.REAL
+
+for var in ["rho0ref_particle","cp_particle"]:
+    POST_PROCESS[f"particle_pp%{var}"] = ParamType.REAL
 
 for cmp in ["x", "y", "z"]:
     for prepend in ["domain%beg", "domain%end", "a", "b"]:
