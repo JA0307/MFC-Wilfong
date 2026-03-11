@@ -414,10 +414,10 @@ contains
             !! @param cell Computational coordinates of the particle
             !! @param q_prim_vf Eulerian field with primitive variables
             !! @return a Acceleration of the particle in direction i
-    subroutine s_get_particle_force(pos, rad, vel_p, mass_p, Re, gamm, vol_frac, cell, &
+    subroutine s_get_particle_force(pos, rad, vel_p, mass_p, Re, gamm, vol_frac, drhodt, cell, &
                                     q_prim_vf, fieldvars, wx, wy, wz, force, rmass_add)
         $:GPU_ROUTINE(parallelism='[seq]')
-        real(wp), intent(in) :: rad, mass_p, Re, gamm, vol_frac
+        real(wp), intent(in) :: rad, mass_p, Re, gamm, vol_frac, drhodt
         real(wp), dimension(3), intent(in) :: pos
         integer, dimension(3), intent(in) :: cell
         real(wp), dimension(3), intent(in) :: vel_p
@@ -437,18 +437,19 @@ contains
         integer :: dir
 
         !Added pass params
-        real(wp) :: mach, Cam, udot_grad_rho, flux_f, flux_b, div_rhou, SDrho, vgradrho, drhodt
+        real(wp) :: mach, Cam, flux_f, flux_b, div_u, SDrho, vpgradrho
         real(wp), dimension(3) :: rhoDuDt, grad_rho, fam
         integer, dimension(3) :: p1
 
         force = 0._wp
         dp = 0._wp
         grad_rho = 0._wp
-        drhodt = 0._wp
         fam = 0._wp
         fluid_vel = 0._wp
         v_rel = 0._wp
         rhoDuDt = 0._wp
+        SDrho = 0._wp
+        ! div_u = 0._wp
 
         !!Interpolation - either even ordered barycentric or 0th order
         if (lag_params%interpolation_order > 1) then
@@ -460,7 +461,7 @@ contains
                 end if
                 if (lag_params%added_mass_model > 0) then
                     grad_rho(dir) = f_interp_barycentric(pos, cell, fieldvars, 3 + dir, wx, wy, wz)
-                    drhodt = drhodt + f_interp_barycentric(pos, cell, fieldvars, 6 + dir, wx, wy, wz)
+                    ! div_u = div_u + f_interp_barycentric(pos, cell, fieldvars, 6 + dir, wx, wy, wz)
                 end if
                 fluid_vel(dir) = f_interp_barycentric(pos, cell, q_prim_vf, momxb + dir - 1, wx, wy, wz)
             end do
@@ -473,13 +474,11 @@ contains
                 end if
                 if (lag_params%added_mass_model > 0) then
                     grad_rho(dir) = fieldvars(3 + dir)%sf(cell(1), cell(2), cell(3))
-                    drhodt = drhodt + fieldvars(6 + dir)%sf(cell(1), cell(2), cell(3))
+                    ! div_u = div_u + fieldvars(6 + dir)%sf(cell(1), cell(2), cell(3))
                 end if
                 fluid_vel(dir) = q_prim_vf(momxb + dir - 1)%sf(cell(1), cell(2), cell(3))
             end do
         end if
-
-        drhodt = -drhodt
 
         v_rel = vel_p - fluid_vel
 
@@ -501,9 +500,8 @@ contains
 
         if (lag_params%added_mass_model > 0) then
             rhoDuDt = -dp
-            udot_grad_rho = dot_product(fluid_vel, grad_rho)
-            vgradrho = dot_product(vel_p, grad_rho)
-            SDrho = (drhodt + udot_grad_rho) !/(1._wp - vol_frac)
+            vpgradrho = dot_product(vel_p, grad_rho)
+            SDrho = drhodt + fluid_vel(1)*grad_rho(1) + fluid_vel(2)*grad_rho(2) + fluid_vel(3)*grad_rho(3)
             mach = vmag/cson
         end if
 
@@ -558,7 +556,7 @@ contains
             rmass_add = rho_fluid*vol*Cam !(1._wp-vol_frac)*rho_fluid*vol*Cam
 
             fam = Cam*vol*(vel_p*SDrho + rhoDuDt + &
-                           fluid_vel*(vgradrho))
+                           fluid_vel*(vpgradrho))
 
             do dir = 1, num_dims
                 if (.not. ieee_is_finite(fam(dir))) then
