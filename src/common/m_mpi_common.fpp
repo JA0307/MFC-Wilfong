@@ -65,7 +65,7 @@ contains
         ! the largest buffer in the computational domain.
 
         if (qbmm .and. .not. polytropic) then
-            v_size = sys_size + 2*nb*4
+            v_size = sys_size + 2*nb*nnode
         else
             v_size = sys_size
         end if
@@ -219,7 +219,7 @@ contains
 
 #ifndef MFC_POST_PROCESS
         if (qbmm .and. .not. polytropic) then
-            do i = sys_size + 1, sys_size + 2*nb*4
+            do i = sys_size + 1, sys_size + 2*nb*nnode
                 call MPI_TYPE_CREATE_SUBARRAY(num_dims, sizes_glb, sizes_loc, start_idx, &
                                               MPI_ORDER_FORTRAN, mpi_p, MPI_IO_DATA%view(i), ierr)
                 call MPI_TYPE_COMMIT(MPI_IO_DATA%view(i), ierr)
@@ -392,6 +392,8 @@ contains
 #ifdef MFC_MPI
         integer :: ierr !< Generic flag used to identify and report MPI errors
 
+        bubs_glb = 0
+
         ! Reducing local extrema of ICFL, VCFL, CCFL and Rc numbers to their
         ! global extrema and bookkeeping the results on the rank 0 processor
         call MPI_REDUCE(icfl_max_loc, icfl_max_glb, 1, &
@@ -415,6 +417,7 @@ contains
 #else
 
         icfl_max_glb = icfl_max_loc
+        bubs_glb = 0
 
         if (viscous) then
             vcfl_max_glb = vcfl_max_loc
@@ -445,6 +448,8 @@ contains
         call MPI_REDUCE(var_loc, sum, 1, MPI_INTEGER, &
                         MPI_SUM, 0, MPI_COMM_WORLD, ierr)
 
+#else
+        sum = var_loc
 #endif
 
     end subroutine s_mpi_reduce_int_sum
@@ -736,7 +741,7 @@ contains
 
         if (present(pb_in) .and. present(mv_in) .and. qbmm .and. .not. polytropic) then
             qbmm_comm = .true.
-            v_size = nVar + 2*nb*4
+            v_size = nVar + 2*nb*nnode
             buffer_counts = (/ &
                             buff_size*v_size*(n + 1)*(p + 1), &
                             buff_size*v_size*(m + 2*buff_size + 1)*(p + 1), &
@@ -805,9 +810,9 @@ contains
                         do l = 0, p
                             do k = 0, n
                                 do j = 0, buff_size - 1
-                                    do i = nVar + 1, nVar + 4
+                                    do i = nVar + 1, nVar + nnode
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 (j + buff_size*(k + (n + 1)*l))
                                             buff_send(r) = real(pb_in(j + pack_offset, k, l, i - nVar, q), kind=wp)
                                         end do
@@ -821,9 +826,9 @@ contains
                         do l = 0, p
                             do k = 0, n
                                 do j = 0, buff_size - 1
-                                    do i = nVar + 1, nVar + 4
+                                    do i = nVar + 1, nVar + nnode
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 (j + buff_size*(k + (n + 1)*l))
                                             buff_send(r) = real(mv_in(j + pack_offset, k, l, i - nVar, q), kind=wp)
                                         end do
@@ -851,12 +856,12 @@ contains
 
                     if (qbmm_comm) then
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, p
                                 do k = 0, buff_size - 1
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  (k + buff_size*l))
                                             buff_send(r) = real(pb_in(j, k + pack_offset, l, i - nVar, q), kind=wp)
@@ -868,12 +873,12 @@ contains
                         $:END_GPU_PARALLEL_LOOP()
 
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, p
                                 do k = 0, buff_size - 1
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  (k + buff_size*l))
                                             buff_send(r) = real(mv_in(j, k + pack_offset, l, i - nVar, q), kind=wp)
@@ -902,12 +907,12 @@ contains
 
                     if (qbmm_comm) then
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, buff_size - 1
                                 do k = -buff_size, n + buff_size
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + (n + 2*buff_size + 1)*l))
                                             buff_send(r) = real(pb_in(j, k, l + pack_offset, i - nVar, q), kind=wp)
@@ -919,12 +924,12 @@ contains
                         $:END_GPU_PARALLEL_LOOP()
 
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, buff_size - 1
                                 do k = -buff_size, n + buff_size
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + (n + 2*buff_size + 1)*l))
                                             buff_send(r) = real(mv_in(j, k, l + pack_offset, i - nVar, q), kind=wp)
@@ -1013,9 +1018,9 @@ contains
                         do l = 0, p
                             do k = 0, n
                                 do j = -buff_size, -1
-                                    do i = nVar + 1, nVar + 4
+                                    do i = nVar + 1, nVar + nnode
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 (j + buff_size*((k + 1) + (n + 1)*l))
                                             pb_in(j + unpack_offset, k, l, i - nVar, q) = real(buff_recv(r), kind=stp)
                                         end do
@@ -1029,9 +1034,9 @@ contains
                         do l = 0, p
                             do k = 0, n
                                 do j = -buff_size, -1
-                                    do i = nVar + 1, nVar + 4
+                                    do i = nVar + 1, nVar + nnode
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 (j + buff_size*((k + 1) + (n + 1)*l))
                                             mv_in(j + unpack_offset, k, l, i - nVar, q) = real(buff_recv(r), kind=stp)
                                         end do
@@ -1065,12 +1070,12 @@ contains
 
                     if (qbmm_comm) then
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, p
                                 do k = -buff_size, -1
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + buff_size*l))
                                             pb_in(j, k + unpack_offset, l, i - nVar, q) = real(buff_recv(r), kind=stp)
@@ -1082,12 +1087,12 @@ contains
                         $:END_GPU_PARALLEL_LOOP()
 
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = 0, p
                                 do k = -buff_size, -1
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + buff_size*l))
                                             mv_in(j, k + unpack_offset, l, i - nVar, q) = real(buff_recv(r), kind=stp)
@@ -1124,12 +1129,12 @@ contains
 
                     if (qbmm_comm) then
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = -buff_size, -1
                                 do k = -buff_size, n + buff_size
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + (n + 2*buff_size + 1)* &
                                                   (l + buff_size)))
@@ -1142,12 +1147,12 @@ contains
                         $:END_GPU_PARALLEL_LOOP()
 
                         $:GPU_PARALLEL_LOOP(collapse=5,private='[r]')
-                        do i = nVar + 1, nVar + 4
+                        do i = nVar + 1, nVar + nnode
                             do l = -buff_size, -1
                                 do k = -buff_size, n + buff_size
                                     do j = -buff_size, m + buff_size
                                         do q = 1, nb
-                                            r = (i - 1) + (q - 1)*4 + nb*4 + v_size* &
+                                            r = (i - 1) + (q - 1)*nnode + nb*nnode + v_size* &
                                                 ((j + buff_size) + (m + 2*buff_size + 1)* &
                                                  ((k + buff_size) + (n + 2*buff_size + 1)* &
                                                   (l + buff_size)))
@@ -1173,12 +1178,13 @@ contains
         !!  @param q_cons_vf Cell-average conservative variables
         !!  @param mpi_dir MPI communication coordinate direction
         !!  @param pbc_loc Processor boundary condition (PBC) location
-    subroutine s_mpi_reduce_beta_variables_buffers(q_comm, &
+    subroutine s_mpi_reduce_beta_variables_buffers(q_comm, kahan_comp, &
                                                    mpi_dir, &
                                                    pbc_loc, &
                                                    nVar)
 
         type(scalar_field), dimension(1:), intent(inout) :: q_comm
+        type(scalar_field), dimension(1:), intent(inout) :: kahan_comp
         integer, intent(in) :: mpi_dir, pbc_loc, nVar
 
         integer :: i, j, k, l, r, q !< Generic loop iterators
@@ -1190,9 +1196,10 @@ contains
         integer :: beg_end(1:2), grid_dims(1:3)
         integer :: dst_proc, src_proc, recv_tag, send_tag
 
-        logical :: beg_end_geq_0, qbmm_comm, replace_buff
+        logical :: replace_buff
 
         integer :: pack_offset, unpack_offset
+        real(wp) :: y_kahan, t_kahan
 
 #ifdef MFC_MPI
         integer :: ierr !< Generic flag used to identify and report MPI errors
@@ -1230,35 +1237,29 @@ contains
         buffer_count = buffer_counts(mpi_dir)
         boundary_conditions = (/bc_x, bc_y, bc_z/)
         beg_end = (/boundary_conditions(mpi_dir)%beg, boundary_conditions(mpi_dir)%end/)
-        beg_end_geq_0 = beg_end(max(pbc_loc, 0) - pbc_loc + 1) >= 0
-
-        ! Implements:
-        ! pbc_loc  bc_x >= 0 -> [send/recv]_tag  [dst/src]_proc
-        ! -1 (=0)      0            ->     [1,0]       [0,0]      | 0 0 [1,0] [beg,beg]
-        ! -1 (=0)      1            ->     [0,0]       [1,0]      | 0 1 [0,0] [end,beg]
-        ! +1 (=1)      0            ->     [0,1]       [1,1]      | 1 0 [0,1] [end,end]
-        ! +1 (=1)      1            ->     [1,1]       [0,1]      | 1 1 [1,1] [beg,end]
-
-        send_tag = f_logical_to_int(.not. f_xor(beg_end_geq_0, pbc_loc == 1))
-        recv_tag = f_logical_to_int(pbc_loc == 1)
-
-        dst_proc = beg_end(1 + f_logical_to_int(f_xor(pbc_loc == 1, beg_end_geq_0)))
-        src_proc = beg_end(1 + f_logical_to_int(pbc_loc == 1))
-
         grid_dims = (/m, n, p/)
 
-        pack_offset = 0
-        if (f_xor(pbc_loc == 1, beg_end_geq_0)) then
+        if (pbc_loc == -1) then
+            ! Phase 1: Rightward accumulation
+            ! Send END buffer to right neighbor, recv from left into BEG, ADD
             pack_offset = grid_dims(mpi_dir) + 1
-        end if
-
-        unpack_offset = 0
-        if (pbc_loc == 1) then
+            unpack_offset = 0
+            dst_proc = merge(beg_end(2), MPI_PROC_NULL, beg_end(2) >= 0)
+            src_proc = merge(beg_end(1), MPI_PROC_NULL, beg_end(1) >= 0)
+            send_tag = 0
+            recv_tag = 0
+            replace_buff = .false.
+        else
+            ! Phase 2: Leftward distribution
+            ! Send BEG buffer to left neighbor, recv from right into END, REPLACE
+            pack_offset = 0
             unpack_offset = grid_dims(mpi_dir) + 1
+            dst_proc = merge(beg_end(1), MPI_PROC_NULL, beg_end(1) >= 0)
+            src_proc = merge(beg_end(2), MPI_PROC_NULL, beg_end(2) >= 0)
+            send_tag = 1
+            recv_tag = 1
+            replace_buff = .true.
         end if
-
-        replace_buff = .false.
-        if (pbc_loc == 1 .and. beg_end_geq_0) replace_buff = .true.
 
         ! Pack Buffer to Send
         #:for mpi_dir in [1, 2, 3]
@@ -1273,7 +1274,8 @@ contains
                                         (j + mapcells + 1) + lb_size*( &
                                         (k - comm_coords(2)%beg) + comm_size(2)* &
                                         (l - comm_coords(3)%beg)))
-                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j + pack_offset, k, l), kind=wp)
+                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j + pack_offset, k, l), kind=wp) &
+                                                   - real(kahan_comp(beta_vars(i))%sf(j + pack_offset, k, l), kind=wp)
                                 end do
                             end do
                         end do
@@ -1289,7 +1291,8 @@ contains
                                         (j - comm_coords(1)%beg) + comm_size(1)*( &
                                         (k + mapcells + 1) + lb_size* &
                                         (l - comm_coords(3)%beg)))
-                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j, k + pack_offset, l), kind=wp)
+                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j, k + pack_offset, l), kind=wp) &
+                                                   - real(kahan_comp(beta_vars(i))%sf(j, k + pack_offset, l), kind=wp)
                                 end do
                             end do
                         end do
@@ -1305,7 +1308,8 @@ contains
                                         (j - comm_coords(1)%beg) + comm_size(1)*( &
                                         (k - comm_coords(2)%beg) + comm_size(2)* &
                                         (l + mapcells + 1)))
-                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j, k, l + pack_offset), kind=wp)
+                                    buff_send(r) = real(q_comm(beta_vars(i))%sf(j, k, l + pack_offset), kind=wp) &
+                                                   - real(kahan_comp(beta_vars(i))%sf(j, k, l + pack_offset), kind=wp)
                                 end do
                             end do
                         end do
@@ -1359,76 +1363,96 @@ contains
             MPI_COMM_WORLD, MPI_STATUS_IGNORE, ierr)
 #endif
 
-        ! Unpack Received Buffer
+        ! Unpack Received Buffer (skip if no source rank)
         call nvtxStartRange("BETA-COMM-UNPACKBUF")
-        #:for mpi_dir in [1, 2, 3]
-            if (mpi_dir == ${mpi_dir}$) then
-                #:if mpi_dir == 1
-                    $:GPU_PARALLEL_LOOP(collapse=4,private='[r]',copyin='[replace_buff]')
-                    do l = comm_coords(3)%beg, comm_coords(3)%end
-                        do k = comm_coords(2)%beg, comm_coords(2)%end
-                            do j = -mapcells - 1, mapcells
-                                do i = 1, v_size
-                                    r = (i - 1) + v_size*( &
-                                        (j + mapcells + 1) + lb_size*( &
-                                        (k - comm_coords(2)%beg) + comm_size(2)* &
-                                        (l - comm_coords(3)%beg)))
-                                    if (replace_buff) then
-                                        q_comm(beta_vars(i))%sf(j + unpack_offset, k, l) = real(buff_recv(r), kind=stp)
-                                    else
-                                        q_comm(beta_vars(i))%sf(j + unpack_offset, k, l) = &
-                                            q_comm(beta_vars(i))%sf(j + unpack_offset, k, l) + real(buff_recv(r), kind=stp)
-                                    end if
-                                end do
-                            end do
-                        end do
-                    end do
-                    $:END_GPU_PARALLEL_LOOP()
-                #:elif mpi_dir == 2
-                    $:GPU_PARALLEL_LOOP(collapse=4,private='[r]',copyin='[replace_buff]')
-                    do i = 1, v_size
+        if (src_proc /= MPI_PROC_NULL) then
+            #:for mpi_dir in [1, 2, 3]
+                if (mpi_dir == ${mpi_dir}$) then
+                    #:if mpi_dir == 1
+                        $:GPU_PARALLEL_LOOP(collapse=4,private='[r,y_kahan,t_kahan]',copyin='[replace_buff]')
                         do l = comm_coords(3)%beg, comm_coords(3)%end
-                            do k = -mapcells - 1, mapcells
-                                do j = comm_coords(1)%beg, comm_coords(1)%end
-                                    r = (i - 1) + v_size*( &
-                                        (j - comm_coords(1)%beg) + comm_size(1)*( &
-                                        (k + mapcells + 1) + lb_size* &
-                                        (l - comm_coords(3)%beg)))
-                                    if (replace_buff) then
-                                        q_comm(beta_vars(i))%sf(j, k + unpack_offset, l) = real(buff_recv(r), kind=stp)
-                                    else
-                                        q_comm(beta_vars(i))%sf(j, k + unpack_offset, l) = &
-                                            q_comm(beta_vars(i))%sf(j, k + unpack_offset, l) + real(buff_recv(r), kind=stp)
-                                    end if
-                                end do
-                            end do
-                        end do
-                    end do
-                    $:END_GPU_PARALLEL_LOOP()
-                #:else
-                    $:GPU_PARALLEL_LOOP(collapse=4,private='[r]',copyin='[replace_buff]')
-                    do i = 1, v_size
-                        do l = -mapcells - 1, mapcells
                             do k = comm_coords(2)%beg, comm_coords(2)%end
-                                do j = comm_coords(1)%beg, comm_coords(1)%end
-                                    r = (i - 1) + v_size*( &
-                                        (j - comm_coords(1)%beg) + comm_size(1)*( &
-                                        (k - comm_coords(2)%beg) + comm_size(2)* &
-                                        (l + mapcells + 1)))
-                                    if (replace_buff) then
-                                        q_comm(beta_vars(i))%sf(j, k, l + unpack_offset) = real(buff_recv(r), kind=stp)
-                                    else
-                                        q_comm(beta_vars(i))%sf(j, k, l + unpack_offset) = &
-                                            q_comm(beta_vars(i))%sf(j, k, l + unpack_offset) + real(buff_recv(r), kind=stp)
-                                    end if
+                                do j = -mapcells - 1, mapcells
+                                    do i = 1, v_size
+                                        r = (i - 1) + v_size*( &
+                                            (j + mapcells + 1) + lb_size*( &
+                                            (k - comm_coords(2)%beg) + comm_size(2)* &
+                                            (l - comm_coords(3)%beg)))
+                                        if (replace_buff) then
+                                            q_comm(beta_vars(i))%sf(j + unpack_offset, k, l) = real(buff_recv(r), kind=stp)
+                                            kahan_comp(beta_vars(i))%sf(j + unpack_offset, k, l) = &
+                                                real(q_comm(beta_vars(i))%sf(j + unpack_offset, k, l), kind=wp) - buff_recv(r)
+                                        else
+                                            y_kahan = buff_recv(r) &
+                                                      - real(kahan_comp(beta_vars(i))%sf(j + unpack_offset, k, l), kind=wp)
+                                            t_kahan = real(q_comm(beta_vars(i))%sf(j + unpack_offset, k, l), kind=wp) + y_kahan
+                                            kahan_comp(beta_vars(i))%sf(j + unpack_offset, k, l) = &
+                                                (t_kahan - q_comm(beta_vars(i))%sf(j + unpack_offset, k, l)) - y_kahan
+                                            q_comm(beta_vars(i))%sf(j + unpack_offset, k, l) = t_kahan
+                                        end if
+                                    end do
                                 end do
                             end do
                         end do
-                    end do
-                    $:END_GPU_PARALLEL_LOOP()
-                #:endif
-            end if
-        #:endfor
+                        $:END_GPU_PARALLEL_LOOP()
+                    #:elif mpi_dir == 2
+                        $:GPU_PARALLEL_LOOP(collapse=4,private='[r,y_kahan,t_kahan]',copyin='[replace_buff]')
+                        do i = 1, v_size
+                            do l = comm_coords(3)%beg, comm_coords(3)%end
+                                do k = -mapcells - 1, mapcells
+                                    do j = comm_coords(1)%beg, comm_coords(1)%end
+                                        r = (i - 1) + v_size*( &
+                                            (j - comm_coords(1)%beg) + comm_size(1)*( &
+                                            (k + mapcells + 1) + lb_size* &
+                                            (l - comm_coords(3)%beg)))
+                                        if (replace_buff) then
+                                            q_comm(beta_vars(i))%sf(j, k + unpack_offset, l) = real(buff_recv(r), kind=stp)
+                                            kahan_comp(beta_vars(i))%sf(j, k + unpack_offset, l) = &
+                                                real(q_comm(beta_vars(i))%sf(j, k + unpack_offset, l), kind=wp) - buff_recv(r)
+                                        else
+                                            y_kahan = buff_recv(r) &
+                                                      - real(kahan_comp(beta_vars(i))%sf(j, k + unpack_offset, l), kind=wp)
+                                            t_kahan = real(q_comm(beta_vars(i))%sf(j, k + unpack_offset, l), kind=wp) + y_kahan
+                                            kahan_comp(beta_vars(i))%sf(j, k + unpack_offset, l) = &
+                                                (t_kahan - q_comm(beta_vars(i))%sf(j, k + unpack_offset, l)) - y_kahan
+                                            q_comm(beta_vars(i))%sf(j, k + unpack_offset, l) = t_kahan
+                                        end if
+                                    end do
+                                end do
+                            end do
+                        end do
+                        $:END_GPU_PARALLEL_LOOP()
+                    #:else
+                        $:GPU_PARALLEL_LOOP(collapse=4,private='[r,y_kahan,t_kahan]',copyin='[replace_buff]')
+                        do i = 1, v_size
+                            do l = -mapcells - 1, mapcells
+                                do k = comm_coords(2)%beg, comm_coords(2)%end
+                                    do j = comm_coords(1)%beg, comm_coords(1)%end
+                                        r = (i - 1) + v_size*( &
+                                            (j - comm_coords(1)%beg) + comm_size(1)*( &
+                                            (k - comm_coords(2)%beg) + comm_size(2)* &
+                                            (l + mapcells + 1)))
+                                        if (replace_buff) then
+                                            q_comm(beta_vars(i))%sf(j, k, l + unpack_offset) = real(buff_recv(r), kind=stp)
+                                            kahan_comp(beta_vars(i))%sf(j, k, l + unpack_offset) = &
+                                                real(q_comm(beta_vars(i))%sf(j, k, l + unpack_offset), kind=wp) - buff_recv(r)
+                                        else
+                                            y_kahan = buff_recv(r) &
+                                                      - real(kahan_comp(beta_vars(i))%sf(j, k, l + unpack_offset), kind=wp)
+                                            t_kahan = real(q_comm(beta_vars(i))%sf(j, k, l + unpack_offset), kind=wp) + y_kahan
+                                            kahan_comp(beta_vars(i))%sf(j, k, l + unpack_offset) = &
+                                                (t_kahan - q_comm(beta_vars(i))%sf(j, k, l + unpack_offset)) - y_kahan
+                                            q_comm(beta_vars(i))%sf(j, k, l + unpack_offset) = t_kahan
+                                        end if
+                                    end do
+                                end do
+                            end do
+                        end do
+                        $:END_GPU_PARALLEL_LOOP()
+                    #:endif
+                end if
+            #:endfor
+        end if
         call nvtxEndRange
 #endif
 

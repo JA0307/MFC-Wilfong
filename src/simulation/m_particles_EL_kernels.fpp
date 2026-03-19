@@ -91,7 +91,7 @@ contains
     end subroutine s_compute_gaussian_contribution
 
     !> The purpose of this subroutine is to compute the gaussian smearing of particle volume fraction and source terms with atomic cell updates
-    subroutine s_gaussian_atomic(rad, vel, pos, force_p, gauSum, cell, updatedvar, onlyBeta)
+    subroutine s_gaussian_atomic(rad, vel, pos, force_p, gauSum, cell, updatedvar, kcomp, onlyBeta)
         $:GPU_ROUTINE(function_name='s_gaussian_atomic',parallelism='[seq]', &
             & cray_inline=True)
 
@@ -99,6 +99,7 @@ contains
         real(wp), intent(in), dimension(3) :: pos, vel, force_p
         integer, intent(in), dimension(3) :: cell
         type(scalar_field), dimension(:), intent(inout) :: updatedvar
+        type(scalar_field), dimension(:), intent(inout) :: kcomp
 
         real(wp) :: volpart, stddsv, Vol_loc, func, weight
         real(wp) :: fp_x, fp_y, fp_z, vp_x, vp_y, vp_z

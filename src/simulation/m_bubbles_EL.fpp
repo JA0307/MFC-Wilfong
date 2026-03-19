@@ -618,6 +618,7 @@ contains
         !! @param q_prim_vf Primitive variables
         !! @param stage Current stage in the time-stepper algorithm
     subroutine s_compute_bubble_EL_dynamics(q_prim_vf, bc_type, stage)
+
         type(scalar_field), dimension(sys_size), intent(inout) :: q_prim_vf
         type(integer_field), dimension(1:num_dims, 1:2), intent(in) :: bc_type
         integer, intent(in) :: stage
@@ -952,9 +953,9 @@ contains
 
         call nvtxStartRange("BUBBLES-LAGRANGE-BETA-COMM")
         if (lag_params%cluster_type >= 4) then
-            call s_populate_beta_buffers(q_beta, bc_type, 3)
+            call s_populate_beta_buffers(q_beta, kahan_comp, bc_type, 3)
         else
-            call s_populate_beta_buffers(q_beta, bc_type, 2)
+            call s_populate_beta_buffers(q_beta, kahan_comp, bc_type, 2)
         end if
         call nvtxEndRange
 
@@ -1588,6 +1589,7 @@ contains
             cell = fd_number - buff_size
             call s_locate_cell(mtn_pos(k, 1:3, 2), cell, mtn_s(k, 1:3, 2))
         end do
+        $:END_GPU_PARALLEL_LOOP()
 
         call nvtxEndRange ! LAG-BC
 
@@ -2014,8 +2016,7 @@ contains
         integer(KIND=MPI_OFFSET_KIND) :: disp
         integer :: view
         integer, dimension(2) :: gsizes, lsizes, start_idx_part
-        integer, dimension(num_procs) :: part_order, part_ord_mpi
-        integer, dimension(num_procs) :: proc_bubble_counts
+        integer, allocatable :: proc_bubble_counts(:)
         real(wp), dimension(1:1, 1:lag_io_vars) :: dummy
         dummy = 0._wp
 
@@ -2029,6 +2030,8 @@ contains
         end if
 
         if (.not. parallel_io) return
+
+        allocate (proc_bubble_counts(num_procs))
 
         lsizes(1) = bub_id
         lsizes(2) = lag_io_vars
@@ -2081,22 +2084,25 @@ contains
         if (bub_id > 0) then
             allocate (MPI_IO_DATA_lag_bubbles(max(1, bub_id), 1:lag_io_vars))
 
+            i = 0
             do k = 1, n_el_bubs_loc
-                MPI_IO_DATA_lag_bubbles(k, 1) = real(lag_id(k, 1))
-                MPI_IO_DATA_lag_bubbles(k, 2:4) = mtn_pos(k, 1:3, 1)
-                MPI_IO_DATA_lag_bubbles(k, 5:7) = mtn_posPrev(k, 1:3, 1)
-                MPI_IO_DATA_lag_bubbles(k, 8:10) = mtn_vel(k, 1:3, 1)
-                MPI_IO_DATA_lag_bubbles(k, 11) = intfc_rad(k, 1)
-                MPI_IO_DATA_lag_bubbles(k, 12) = intfc_vel(k, 1)
-                MPI_IO_DATA_lag_bubbles(k, 13) = bub_R0(k)
-                MPI_IO_DATA_lag_bubbles(k, 14) = Rmax_stats(k)
-                MPI_IO_DATA_lag_bubbles(k, 15) = Rmin_stats(k)
-                MPI_IO_DATA_lag_bubbles(k, 16) = bub_dphidt(k)
-                MPI_IO_DATA_lag_bubbles(k, 17) = gas_p(k, 1)
-                MPI_IO_DATA_lag_bubbles(k, 18) = gas_mv(k, 1)
-                MPI_IO_DATA_lag_bubbles(k, 19) = gas_mg(k)
-                MPI_IO_DATA_lag_bubbles(k, 20) = gas_betaT(k)
-                MPI_IO_DATA_lag_bubbles(k, 21) = gas_betaC(k)
+                if (.not. particle_in_domain_physical(mtn_pos(k, 1:3, 1))) cycle
+                i = i + 1
+                MPI_IO_DATA_lag_bubbles(i, 1) = real(lag_id(k, 1))
+                MPI_IO_DATA_lag_bubbles(i, 2:4) = mtn_pos(k, 1:3, 1)
+                MPI_IO_DATA_lag_bubbles(i, 5:7) = mtn_posPrev(k, 1:3, 1)
+                MPI_IO_DATA_lag_bubbles(i, 8:10) = mtn_vel(k, 1:3, 1)
+                MPI_IO_DATA_lag_bubbles(i, 11) = intfc_rad(k, 1)
+                MPI_IO_DATA_lag_bubbles(i, 12) = intfc_vel(k, 1)
+                MPI_IO_DATA_lag_bubbles(i, 13) = bub_R0(k)
+                MPI_IO_DATA_lag_bubbles(i, 14) = Rmax_stats(k)
+                MPI_IO_DATA_lag_bubbles(i, 15) = Rmin_stats(k)
+                MPI_IO_DATA_lag_bubbles(i, 16) = bub_dphidt(k)
+                MPI_IO_DATA_lag_bubbles(i, 17) = gas_p(k, 1)
+                MPI_IO_DATA_lag_bubbles(i, 18) = gas_mv(k, 1)
+                MPI_IO_DATA_lag_bubbles(i, 19) = gas_mg(k)
+                MPI_IO_DATA_lag_bubbles(i, 20) = gas_betaT(k)
+                MPI_IO_DATA_lag_bubbles(i, 21) = gas_betaC(k)
             end do
 
             call MPI_TYPE_CREATE_SUBARRAY(2, gsizes, lsizes, start_idx_part, &
@@ -2136,6 +2142,8 @@ contains
 
             call MPI_FILE_CLOSE(ifile, ierr)
         end if
+
+        deallocate (proc_bubble_counts)
 
 #endif
 
@@ -2313,3 +2321,4 @@ contains
     end subroutine s_finalize_lagrangian_solver
 
 end module m_bubbles_EL
+

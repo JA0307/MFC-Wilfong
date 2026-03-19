@@ -362,7 +362,7 @@ contains
             call s_compute_gaussian_contribution(myR, myPos, cell, func_sum)
             gSum(k) = func_sum
 
-            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, only_beta)
+            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, kahan_comp, only_beta)
 
         end do
         $:END_GPU_PARALLEL_LOOP()
@@ -864,7 +864,7 @@ contains
 
             if (lag_params%solver_approach == 2) then
                 func_sum = gSum(k)
-                call s_gaussian_atomic(myR, myVel, myPos, force_vec, func_sum, cell, q_particles, only_beta)
+                call s_gaussian_atomic(myR, myVel, myPos, force_vec, func_sum, cell, q_particles, kahan_comp, only_beta)
             end if
 
         end do
@@ -908,7 +908,7 @@ contains
         integer, dimension(3) :: cellaux
         integer :: i, k, l, q, ip, jp, kp, ii, jj, kk
         logical :: celloutside
-        real(wp) :: pidtksp2, ksp, nu1, nu2, Rp1, Rp2, E1, E2, Estar, cor, rmag, Rstar, dij, eta_n, kappa_n, mp1, mp2, dt_loc
+        real(wp) :: pidtksp2, ksp, nu1, nu2, Rp1, Rp2, E1, E2, Estar, cor, rmag, Rstar, dij, eta_n, kappa_n, rmult, mp1, mp2, dt_loc
         real(wp), dimension(3) :: xp1, xp2, vp1, vp2, v_rel, rpij, nij, vnij, Fnpp_ij, force_vec
         integer :: kpz
         integer :: total_recv
@@ -917,30 +917,11 @@ contains
 
         if (num_procs > 1) then
             n_el_particles_loc_before_ghost = n_el_particles_loc
-            call s_reset_force_buffers()
             call s_add_ghost_particles()
         end if
 
-        ! if (lag_num_ts == 1) then
-        !     dt_loc = dt
-        ! elseif (lag_num_ts == 2) then
-        !     if (stage == 1) then
-        !         dt_loc = dt
-        !     elseif (stage == 2) then
-        !         dt_loc = dt/2._wp
-        !     end if
-        ! elseif (lag_num_ts == 3) then
-        !     if (stage == 1) then
-        !         dt_loc = dt
-        !     elseif (stage == 2) then
-        !         dt_loc = dt/4._wp
-        !     elseif (stage == 3) then
-        !         dt_loc = (2._wp/3._wp)*dt
-        !     end if
-        ! end if
-
         kpz = 0
-        if (num_dims == 3) kpz = 1
+        if (num_dims == 3) kpz = ncc
 
         ksp = 10._wp
         nu1 = 0.35_wp
@@ -960,11 +941,11 @@ contains
         error_flag = 0
         $:GPU_UPDATE(device='[error_flag]')
 
-        $:GPU_PARALLEL_LOOP(private='[i,k,cell,ip,jp,kp,Rp1,xp1,mp1,vp1,kk,jj,ii,cellaux,q,Rp2,xp2,mp2,vp2,v_rel,Rstar,rpij,rmag,nij,vnij,dij,kappa_n,eta_n,Fnpp_ij,force_vec,s_cell,celloutside,count]',&
+        $:GPU_PARALLEL_LOOP(private='[i,k,cell,ip,jp,kp,Rp1,xp1,mp1,vp1,kk,jj,ii,cellaux,q,Rp2,xp2,mp2,vp2,v_rel,Rstar,rpij,rmag,nij,vnij,dij,kappa_n,rmult,eta_n,Fnpp_ij,force_vec,s_cell,celloutside,count]',&
         & copyin='[ksp,nu1,nu2,E1,E2,cor,pidtksp2,Estar,kpz]')
         do k = 1, n_el_particles_loc
 
-            if (.not. particle_in_domain_physical(particle_pos(k, 1:3, 2))) then
+            if (p_owner_rank(k) /= proc_rank) then
                 cycle
             end if
 
@@ -984,8 +965,8 @@ contains
             vp1 = particle_vel(k, :, 2)
 
             do kk = kp - kpz, kp + kpz
-                do jj = jp - 1, jp + 1
-                    do ii = ip - 1, ip + 1
+                do jj = jp - ncc, jp + ncc
+                    do ii = ip - ncc, ip + ncc
 
                         cellaux(1) = ii
                         cellaux(2) = jj
@@ -1007,7 +988,7 @@ contains
                                     exit
                                 end if
 
-                                if (lag_part_id(q, 1) > lag_part_id(k, 1)) then
+                                if (q /= k) then
 
                                     Rp2 = particle_rad(q, 2)
                                     xp2 = particle_pos(q, :, 2)
@@ -1027,27 +1008,13 @@ contains
 
                                         kappa_n = min((pidtksp2*mp1), (pidtksp2*mp2), (Estar*sqrt(Rstar)*sqrt(abs(dij))))
 
-                                        eta_n = ((-2._wp*sqrt(kappa_n)*log(cor))/sqrt((log(cor))**2 + pi**2))*(1._wp/sqrt((1._wp/mp1) + (1._wp/mp2)))
+                                        rmult = (mp1*mp2)/(mp1 + mp2)
+                                        eta_n = ((-2._wp*sqrt(kappa_n)*log(cor))/sqrt((log(cor))**2 + pi**2))*sqrt(rmult)
 
                                         Fnpp_ij = -kappa_n*dij*nij - eta_n*vnij
 
                                         f_p(k, :) = f_p(k, :) + Fnpp_ij
 
-                                        if (p_owner_rank(q) == proc_rank) then
-                                            ! f_p(q, :) = f_p(q, :) - Fnpp_ij
-
-                                            $:GPU_ATOMIC(atomic='update')
-                                            f_p(q, 1) = f_p(q, 1) - Fnpp_ij(1)
-
-                                            $:GPU_ATOMIC(atomic='update')
-                                            f_p(q, 2) = f_p(q, 2) - Fnpp_ij(2)
-
-                                            $:GPU_ATOMIC(atomic='update')
-                                            f_p(q, 3) = f_p(q, 3) - Fnpp_ij(3)
-
-                                        else
-                                            call s_add_force_to_send_buffer(p_owner_rank(q), lag_part_id(q, 1), -Fnpp_ij)
-                                        end if
                                     end if
                                 end if
 
@@ -1063,6 +1030,7 @@ contains
             !>Check each local particle for wall collisions
 
             call s_compute_wall_collisions(xp1, vp1, Rp1, mp1, Estar, pidtksp2, cor, force_vec)
+
             f_p(k, :) = f_p(k, :) + force_vec
 
         end do
@@ -1079,31 +1047,6 @@ contains
 
             n_el_particles_loc = n_el_particles_loc_before_ghost
             $:GPU_UPDATE(device='[n_el_particles_loc]')
-
-            total_recv = 0
-            force_recv_ids = 0
-            force_recv_vals = 0.
-
-            call s_transfer_collision_forces(total_recv, force_recv_ids, force_recv_vals)
-
-            $:GPU_UPDATE(device = '[force_recv_ids,force_recv_vals]')
-
-            $:GPU_PARALLEL_LOOP(private='[i,k]',copyin = '[total_recv]')
-            do i = 1, total_recv
-                k = gid_to_local(force_recv_ids(i))
-                if (k > 0) then
-                    $:GPU_ATOMIC(atomic='update')
-                    f_p(k, 1) = f_p(k, 1) + force_recv_vals(3*(i - 1) + 1)
-
-                    $:GPU_ATOMIC(atomic='update')
-                    f_p(k, 2) = f_p(k, 2) + force_recv_vals(3*(i - 1) + 2)
-
-                    $:GPU_ATOMIC(atomic='update')
-                    f_p(k, 3) = f_p(k, 3) + force_recv_vals(3*(i - 1) + 3)
-
-                end if
-            end do
-            $:END_GPU_PARALLEL_LOOP()
 
         end if
 
@@ -1436,9 +1379,9 @@ contains
 
         call nvtxStartRange("PARTICLES-LAGRANGE-BETA-COMM")
         if (onlyBeta) then
-            call s_populate_beta_buffers(q_particles, bc_type, 1)
+            call s_populate_beta_buffers(q_particles, kahan_comp, bc_type, 1)
         else
-            call s_populate_beta_buffers(q_particles, bc_type, q_particles_idx)
+            call s_populate_beta_buffers(q_particles, kahan_comp, bc_type, q_particles_idx)
         end if
         call nvtxEndRange
 
@@ -1690,14 +1633,14 @@ contains
             ! Relocate particles at solid boundaries and delete particles that leave
             ! buffer regions
             if (any(bc_x%beg == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                .and. particle_pos(k, 1, 2) < x_cb(-1) + eps_overlap*particle_rad(k, 2)) then
-                particle_pos(k, 1, 2) = x_cb(-1) + eps_overlap*particle_rad(k, 2)
+                .and. particle_pos(k, 1, 2) < x_cb(-1) + eps_overlap) then
+                particle_pos(k, 1, 2) = x_cb(-1) + eps_overlap
                 if (nstage == lag_num_ts) then
                     particle_pos(k, 1, 1) = particle_pos(k, 1, 2)
                 end if
             elseif (any(bc_x%end == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                    .and. particle_pos(k, 1, 2) > x_cb(m) - eps_overlap*particle_rad(k, 2)) then
-                particle_pos(k, 1, 2) = x_cb(m) - eps_overlap*particle_rad(k, 2)
+                    .and. particle_pos(k, 1, 2) > x_cb(m) - eps_overlap) then
+                particle_pos(k, 1, 2) = x_cb(m) - eps_overlap
                 if (nstage == lag_num_ts) then
                     particle_pos(k, 1, 1) = particle_pos(k, 1, 2)
                 end if
@@ -1716,14 +1659,14 @@ contains
             end if
 
             if (any(bc_y%beg == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                .and. particle_pos(k, 2, 2) < y_cb(-1) + eps_overlap*particle_rad(k, 2)) then
-                particle_pos(k, 2, 2) = y_cb(-1) + eps_overlap*particle_rad(k, 2)
+                .and. particle_pos(k, 2, 2) < y_cb(-1) + eps_overlap) then
+                particle_pos(k, 2, 2) = y_cb(-1) + eps_overlap
                 if (nstage == lag_num_ts) then
                     particle_pos(k, 2, 1) = particle_pos(k, 2, 2)
                 end if
             else if (any(bc_y%end == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                     .and. particle_pos(k, 2, 2) > y_cb(n) - eps_overlap*particle_rad(k, 2)) then
-                particle_pos(k, 2, 2) = y_cb(n) - eps_overlap*particle_rad(k, 2)
+                     .and. particle_pos(k, 2, 2) > y_cb(n) - eps_overlap) then
+                particle_pos(k, 2, 2) = y_cb(n) - eps_overlap
                 if (nstage == lag_num_ts) then
                     particle_pos(k, 2, 1) = particle_pos(k, 2, 2)
                 end if
@@ -1743,14 +1686,14 @@ contains
 
             if (p > 0) then
                 if (any(bc_z%beg == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                    .and. particle_pos(k, 3, 2) < z_cb(-1) + eps_overlap*particle_rad(k, 2)) then
-                    particle_pos(k, 3, 2) = z_cb(-1) + eps_overlap*particle_rad(k, 2)
+                    .and. particle_pos(k, 3, 2) < z_cb(-1) + eps_overlap) then
+                    particle_pos(k, 3, 2) = z_cb(-1) + eps_overlap
                     if (nstage == lag_num_ts) then
                         particle_pos(k, 3, 1) = particle_pos(k, 3, 2)
                     end if
                 else if (any(bc_z%end == (/BC_REFLECTIVE, BC_CHAR_SLIP_WALL, BC_SLIP_WALL, BC_NO_SLIP_WALL/)) &
-                         .and. particle_pos(k, 3, 2) > z_cb(p) - eps_overlap*particle_rad(k, 2)) then
-                    particle_pos(k, 3, 2) = z_cb(p) - eps_overlap*particle_rad(k, 2)
+                         .and. particle_pos(k, 3, 2) > z_cb(p) - eps_overlap) then
+                    particle_pos(k, 3, 2) = z_cb(p) - eps_overlap
                     if (nstage == lag_num_ts) then
                         particle_pos(k, 3, 1) = particle_pos(k, 3, 2)
                     end if
@@ -1784,7 +1727,7 @@ contains
         if (n_el_particles_loc > 0) then
             call nvtxStartRange("LAG-BC")
             call nvtxStartRange("LAG-BC-DEV2HOST")
-            $:GPU_UPDATE(host='[particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
                 & lag_part_id, particle_rad, &
                 & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
                 & particle_dposdt, particle_dveldt, keep_bubble, n_el_particles_loc, &
@@ -1831,7 +1774,7 @@ contains
                 end if
             end do
             call nvtxStartRange("LAG-BC-HOST2DEV")
-            $:GPU_UPDATE(device='[particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            $:GPU_UPDATE(device='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, n_el_particles_loc]')
@@ -1854,7 +1797,7 @@ contains
             call s_compute_gaussian_contribution(myR, myPos, cell, func_sum)
             gSum(k) = func_sum
 
-            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, only_beta)
+            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, kahan_comp, only_beta)
 
         end do
 
@@ -2695,6 +2638,7 @@ contains
 
         integer, intent(in) :: src, dest
 
+        p_owner_rank(dest) = p_owner_rank(src)
         particle_R0(dest) = particle_R0(src)
         Rmax_stats_part(dest) = Rmax_stats_part(src)
         Rmin_stats_part(dest) = Rmin_stats_part(src)
