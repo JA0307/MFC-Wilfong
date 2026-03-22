@@ -1337,8 +1337,8 @@ contains
     subroutine s_beta_periodic(q_beta, kahan_comp, bc_dir, bc_loc, k, l, nvar)
         $:GPU_ROUTINE(function_name='s_beta_periodic', &
             & parallelism='[seq]', cray_inline=True)
-        type(scalar_field), dimension(num_dims + 1), intent(inout) :: q_beta
-        type(scalar_field), dimension(num_dims + 1), intent(inout) :: kahan_comp
+        type(scalar_field), dimension(1:), intent(inout) :: q_beta
+        type(scalar_field), dimension(1:), intent(inout) :: kahan_comp
         integer, intent(in) :: bc_dir, bc_loc
         integer, intent(in) :: k, l
         integer, intent(in) :: nvar
@@ -1417,7 +1417,7 @@ contains
     subroutine s_beta_extrapolation(q_beta, bc_dir, bc_loc, k, l, nvar)
         $:GPU_ROUTINE(function_name='s_beta_extrapolation', &
             & parallelism='[seq]', cray_inline=True)
-        type(scalar_field), dimension(num_dims + 1), intent(inout) :: q_beta
+        type(scalar_field), dimension(1:), intent(inout) :: q_beta
         integer, intent(in) :: bc_dir, bc_loc
         integer, intent(in) :: k, l
         integer, intent(in) :: nvar
@@ -1475,8 +1475,8 @@ contains
     subroutine s_beta_reflective(q_beta, kahan_comp, bc_dir, bc_loc, k, l, nvar)
         $:GPU_ROUTINE(function_name='s_beta_reflective', &
             & parallelism='[seq]', cray_inline=True)
-        type(scalar_field), dimension(num_dims + 1), intent(inout) :: q_beta
-        type(scalar_field), dimension(num_dims + 1), intent(inout) :: kahan_comp
+        type(scalar_field), dimension(1:), intent(inout) :: q_beta
+        type(scalar_field), dimension(1:), intent(inout) :: kahan_comp
         integer, intent(in) :: bc_dir, bc_loc
         integer, intent(in) :: k, l
         integer, intent(in) :: nvar
