@@ -1060,6 +1060,7 @@ contains
             ! Compute particle dynamics, forces, dvdt
             call nvtxStartRange("RHS-EL-PARTICLES-DYN")
             call s_compute_particle_EL_dynamics( &
+                q_cons_qp%vf(1:sys_size), &
                 q_prim_qp%vf(1:sys_size), &
                 bc_type, stage, &
                 qL_rsx_vf, qL_rsy_vf, qL_rsz_vf, &

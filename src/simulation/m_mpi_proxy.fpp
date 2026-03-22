@@ -316,7 +316,7 @@ contains
         end if
 
         if (particles_lagrange) then
-            #:for VAR in [ 'rho0ref_particle','cp_particle']
+            #:for VAR in [ 'rho0ref_particle','cp_particle','ksp_col','nu_col','E_col','cor_col']
                 call MPI_BCAST(particle_pp%${VAR}$, 1, mpi_p, 0, MPI_COMM_WORLD, ierr)
             #:endfor
         end if

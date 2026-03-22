@@ -477,6 +477,10 @@ contains
         ! Subgrid particle parameters
         particle_pp%rho0ref_particle = dflt_real
         particle_pp%cp_particle = dflt_real
+        particle_pp%ksp_col = dflt_real
+        particle_pp%nu_col = dflt_real
+        particle_pp%E_col = dflt_real
+        particle_pp%cor_col = dflt_real
 
         ! Formatted database file(s) structure parameters
         format = dflt_int

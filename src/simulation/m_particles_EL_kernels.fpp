@@ -14,11 +14,22 @@ module m_particles_EL_kernels
 
     implicit none
 
-    ! Cell list for particle-to-cell mapping (rebuilt each RK stage before smearing)
-    integer, allocatable, dimension(:, :, :) :: cell_list_start  ! (0:m, 0:n, 0:p)
-    integer, allocatable, dimension(:, :, :) :: cell_list_count  ! (0:m, 0:n, 0:p)
-    integer, allocatable, dimension(:) :: cell_list_idx          ! (1:nParticles_glb) sorted particle indices
-    $:GPU_DECLARE(create='[cell_list_start, cell_list_count, cell_list_idx]')
+    integer, parameter :: dPx_id_loc = 1 !< Spatial pressure gradient in x, y, and z
+    integer, parameter :: drhox_id_loc = 4 !< Spatial density gradient in x, y, and z
+    integer, parameter :: dufxdx_id_loc = 7   ! du_x/dx
+    integer, parameter :: dufxdy_id_loc = 8   ! du_x/dy
+    integer, parameter :: dufxdz_id_loc = 9   ! du_x/dz
+    integer, parameter :: dufydx_id_loc = 10  ! du_y/dx
+    integer, parameter :: dufydy_id_loc = 11  ! du_y/dy
+    integer, parameter :: dufydz_id_loc = 12  ! du_y/dz
+    integer, parameter :: dufzdx_id_loc = 13  ! du_z/dx
+    integer, parameter :: dufzdy_id_loc = 14  ! du_z/dy
+    integer, parameter :: dufzdz_id_loc = 15  ! du_z/dz
+
+    ! integer, parameter :: duidxj_id_loc(3,3) = reshape( &
+    !     [dufxdx_id_loc, dufydx_id_loc, dufzdx_id_loc, &
+    !      dufxdy_id_loc, dufydy_id_loc, dufzdy_id_loc, &
+    !      dufxdz_id_loc, dufydz_id_loc, dufzdz_id_loc], [3,3])
 
 contains
 
@@ -415,31 +426,36 @@ contains
             !! @param cell Computational coordinates of the particle
             !! @param q_prim_vf Eulerian field with primitive variables
             !! @return a Acceleration of the particle in direction i
-    subroutine s_get_particle_force(pos, rad, vel_p, mass_p, Re, gamm, vol_frac, drhodt, cell, &
-                                    q_prim_vf, fieldvars, wx, wy, wz, force, rmass_add)
+    subroutine s_get_particle_force(pos, rad, vel_p, mass_p, Re, gamm, cell, &
+                                    q_prim_vf, q_cons_vf, q_particles, fieldvars, rhs_old, duidxj_id_loc, &
+                                    wx, wy, wz, force, rmass_add)
         $:GPU_ROUTINE(parallelism='[seq]')
-        real(wp), intent(in) :: rad, mass_p, Re, gamm, vol_frac, drhodt
+        real(wp), intent(in) :: rad, mass_p, Re, gamm
         real(wp), dimension(3), intent(in) :: pos
         integer, dimension(3), intent(in) :: cell
         real(wp), dimension(3), intent(in) :: vel_p
+        integer, dimension(3, 3), intent(in) :: duidxj_id_loc
+        type(scalar_field), dimension(:), intent(in) :: q_particles
         type(scalar_field), dimension(:), intent(in) :: fieldvars
         type(scalar_field), dimension(:), intent(in) :: wx, wy, wz
         type(scalar_field), dimension(sys_size), intent(in) :: q_prim_vf
+        type(scalar_field), dimension(sys_size), intent(in) :: q_cons_vf
+        type(scalar_field), dimension(sys_size), intent(in) :: rhs_old
 
         real(wp), dimension(3), intent(out) :: force
         real(wp), intent(out) :: rmass_add
 
-        real(wp) :: a, vol, rho_fluid, pressure_fluid
+        real(wp) :: a, vol, rho_fluid, pressure_fluid, alpha_f
         real(wp), dimension(3) :: v_rel, dp
-        real(wp), dimension(fd_order) :: xi, eta, L
         real(wp) :: particle_diam, gas_mu, vmag, cson
         real(wp) :: slip_velocity_x, slip_velocity_y, slip_velocity_z, beta
+        real(wp) :: vol_frac
         real(wp), dimension(3) :: fluid_vel
-        integer :: dir
+        integer :: dir, l
 
         !Added pass params
-        real(wp) :: mach, Cam, flux_f, flux_b, div_u, SDrho, vpgradrho
-        real(wp), dimension(3) :: rhoDuDt, grad_rho, fam
+        real(wp) :: mach, Cam, flux_f, flux_b, SDrho, vrel_gradrho, drhodt
+        real(wp), dimension(3) :: rhoDuDt, grad_rho, fam, udot_gradu
         integer, dimension(3) :: p1
 
         force = 0._wp
@@ -450,37 +466,63 @@ contains
         v_rel = 0._wp
         rhoDuDt = 0._wp
         SDrho = 0._wp
-        ! div_u = 0._wp
+
+        udot_gradu = 0._wp
 
         !!Interpolation - either even ordered barycentric or 0th order
         if (lag_params%interpolation_order > 1) then
             rho_fluid = f_interp_barycentric(pos, cell, q_prim_vf, 1, wx, wy, wz)
             pressure_fluid = f_interp_barycentric(pos, cell, q_prim_vf, E_idx, wx, wy, wz)
+            alpha_f = f_interp_barycentric(pos, cell, q_particles, 1, wx, wy, wz)
             do dir = 1, num_dims
-                if (lag_params%pressure_force .or. lag_params%added_mass_model > 0) then
-                    dp(dir) = f_interp_barycentric(pos, cell, fieldvars, dir, wx, wy, wz)
-                end if
-                if (lag_params%added_mass_model > 0) then
-                    grad_rho(dir) = f_interp_barycentric(pos, cell, fieldvars, 3 + dir, wx, wy, wz)
-                    ! div_u = div_u + f_interp_barycentric(pos, cell, fieldvars, 6 + dir, wx, wy, wz)
-                end if
                 fluid_vel(dir) = f_interp_barycentric(pos, cell, q_prim_vf, momxb + dir - 1, wx, wy, wz)
             end do
+
+            if (lag_params%added_mass_model > 0) then
+                drhodt = rhs_old(1)%sf(cell(1), cell(2), cell(3))
+            end if
+
+            do dir = 1, num_dims
+                if (lag_params%pressure_force .or. lag_params%added_mass_model > 0) then
+                    dp(dir) = f_interp_barycentric(pos, cell, fieldvars, dPx_id_loc + dir - 1, wx, wy, wz)
+                end if
+                if (lag_params%added_mass_model > 0) then
+                    grad_rho(dir) = f_interp_barycentric(pos, cell, fieldvars, drhox_id_loc + dir - 1, wx, wy, wz)
+                    rhoDuDt(dir) = (rhs_old(momxb + dir - 1)%sf(cell(1), cell(2), cell(3)) - fluid_vel(dir)*drhodt)/rho_fluid
+                    do l = 1, num_dims
+                        udot_gradu(dir) = udot_gradu(dir) + fluid_vel(l)*f_interp_barycentric(pos, cell, fieldvars, duidxj_id_loc(dir, l), wx, wy, wz)
+                    end do
+                end if
+            end do
+
         else
             rho_fluid = q_prim_vf(1)%sf(cell(1), cell(2), cell(3))
             pressure_fluid = q_prim_vf(E_idx)%sf(cell(1), cell(2), cell(3))
+            alpha_f = q_particles(1)%sf(cell(1), cell(2), cell(3))
             do dir = 1, num_dims
-                if (lag_params%pressure_force .or. lag_params%added_mass_model > 0) then
-                    dp(dir) = fieldvars(dir)%sf(cell(1), cell(2), cell(3))
-                end if
-                if (lag_params%added_mass_model > 0) then
-                    grad_rho(dir) = fieldvars(3 + dir)%sf(cell(1), cell(2), cell(3))
-                    ! div_u = div_u + fieldvars(6 + dir)%sf(cell(1), cell(2), cell(3))
-                end if
                 fluid_vel(dir) = q_prim_vf(momxb + dir - 1)%sf(cell(1), cell(2), cell(3))
             end do
+
+            if (lag_params%added_mass_model > 0) then
+                drhodt = rhs_old(1)%sf(cell(1), cell(2), cell(3))
+            end if
+
+            do dir = 1, num_dims
+                if (lag_params%pressure_force .or. lag_params%added_mass_model > 0) then
+                    dp(dir) = fieldvars(dPx_id_loc + dir - 1)%sf(cell(1), cell(2), cell(3))
+                end if
+                if (lag_params%added_mass_model > 0) then
+                    grad_rho(dir) = fieldvars(drhox_id_loc + dir - 1)%sf(cell(1), cell(2), cell(3))
+                    rhoDuDt(dir) = (rhs_old(momxb + dir - 1)%sf(cell(1), cell(2), cell(3)) - fluid_vel(dir)*drhodt)/rho_fluid
+                    do l = 1, num_dims
+                        udot_gradu(dir) = udot_gradu(dir) + fluid_vel(l)*fieldvars(duidxj_id_loc(dir, l))%sf(cell(1), cell(2), cell(3))
+                    end do
+                end if
+            end do
+
         end if
 
+        vol_frac = 1._wp - alpha_f
         v_rel = vel_p - fluid_vel
 
         if (lag_params%qs_drag_model > 0 .or. lag_params%added_mass_model > 0) then
@@ -500,9 +542,9 @@ contains
         end if
 
         if (lag_params%added_mass_model > 0) then
-            rhoDuDt = -dp
-            vpgradrho = dot_product(vel_p, grad_rho)
-            SDrho = drhodt + fluid_vel(1)*grad_rho(1) + fluid_vel(2)*grad_rho(2) + fluid_vel(3)*grad_rho(3)
+            rhoDuDt = rho_fluid*(rhoDuDt + udot_gradu)
+            vrel_gradrho = dot_product(-v_rel, grad_rho)
+            SDrho = drhodt + vel_p(1)*grad_rho(1) + vel_p(2)*grad_rho(2) + vel_p(3)*grad_rho(3)
             mach = vmag/cson
         end if
 
@@ -554,10 +596,10 @@ contains
             end if
 
             Cam = 0.5_wp*Cam*(1._wp + 0.68_wp*vol_frac**2)
-            rmass_add = rho_fluid*vol*Cam !(1._wp-vol_frac)*rho_fluid*vol*Cam
+            rmass_add = rho_fluid*vol*Cam
 
-            fam = Cam*vol*(vel_p*SDrho + rhoDuDt + &
-                           fluid_vel*(vpgradrho))
+            fam = Cam*vol*(-v_rel*SDrho + rhoDuDt + &
+                           fluid_vel*(vrel_gradrho))
 
             do dir = 1, num_dims
                 if (.not. ieee_is_finite(fam(dir))) then

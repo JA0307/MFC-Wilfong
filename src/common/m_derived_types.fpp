@@ -396,7 +396,11 @@ module m_derived_types
     !> Derived type annexing the physical parameters required for sub-grid particle models
     type subgrid_particle_physical_parameters
         real(wp) :: rho0ref_particle !< reference density
-        real(wp) :: cp_particle !<solid particle specific heat
+        real(wp) :: cp_particle      !< solid particle specific heat
+        real(wp) :: ksp_col          !< number of timesteps over which collision occurs
+        real(wp) :: nu_col           !< Poisson's ratio of particle for collision
+        real(wp) :: E_col            !< Young's modulus of particle for collision
+        real(wp) :: cor_col          !< coefficient of restituion for collision
     end type subgrid_particle_physical_parameters
 
     type mpi_io_airfoil_ib_var

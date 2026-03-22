@@ -1084,7 +1084,7 @@ def _load():  # pylint: disable=too-many-locals,too-many-statements
         _r(f"bub_pp%{a}", REAL, {"bubbles"}, math=sym)
 
     # --- particle_pp (particle properties) ---
-    for a in ["rho0ref_particle", "cp_particle"]:
+    for a in ["rho0ref_particle", "cp_particle", "ksp_col", "nu_col", "E_col", "cor_col"]:
         _r(f"particle_pp%{a}", REAL, {"particles"})
 
     # --- patch_ib (10 immersed boundaries) ---
