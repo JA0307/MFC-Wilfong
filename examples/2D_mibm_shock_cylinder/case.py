@@ -1,5 +1,4 @@
 import json
-import math
 
 # This case is a recreation of the case from "Moving overlapping grids with adaptive mesh refinement for high-speed reactive and non-reactive flow"
 # by William D. Henshaw and Donald W. Schwendeman

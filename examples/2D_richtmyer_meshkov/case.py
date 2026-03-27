@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import math
 
 mu = 1.0e-4
 lambd = 1.0

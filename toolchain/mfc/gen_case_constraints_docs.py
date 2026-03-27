@@ -6,17 +6,17 @@ Parses toolchain/mfc/case_validator.py, extracts all `self.prohibit(...)` rules,
 maps them to parameters and stages, and emits Markdown to stdout.
 
 Also generates case design playbook from curated working examples.
-"""  # pylint: disable=too-many-lines
+"""
 
 from __future__ import annotations
 
 import json
-import sys
 import subprocess
+import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Iterable, Any
-from collections import defaultdict
+from typing import Any, Dict, Iterable, List
 
 HERE = Path(__file__).resolve().parent
 CASE_VALIDATOR_PATH = HERE / "case_validator.py"
@@ -28,20 +28,21 @@ _toolchain_dir = str(HERE.parent)
 if _toolchain_dir not in sys.path:
     sys.path.insert(0, _toolchain_dir)
 
-from mfc.params import CONSTRAINTS, DEPENDENCIES, get_value_label  # noqa: E402  pylint: disable=wrong-import-position
-from mfc.params.ast_analyzer import (  # noqa: E402  pylint: disable=wrong-import-position
-    Rule, classify_message, feature_title,
+from mfc.params import CONSTRAINTS, DEPENDENCIES, get_value_label  # noqa: E402
+from mfc.params.ast_analyzer import (  # noqa: E402
+    Rule,
     analyze_case_validator,
+    classify_message,
+    feature_title,
 )
 
-
-# ---------------------------------------------------------------------------
 # Case Playbook Generation (from working examples)
-# ---------------------------------------------------------------------------
+
 
 @dataclass
 class PlaybookEntry:
     """A curated example case for the playbook"""
+
     case_dir: str
     title: str
     description: str
@@ -56,63 +57,63 @@ PLAYBOOK_EXAMPLES = [
         "2D Shock-Bubble Interaction",
         "Two-fluid shock-interface benchmark. Classic validation case for compressible multiphase flows.",
         "Beginner",
-        ["2D", "Multiphase", "Shock"]
+        ["2D", "Multiphase", "Shock"],
     ),
     PlaybookEntry(
         "1D_bubblescreen",
         "1D Bubble Screen",
         "Euler-Euler ensemble-averaged bubble dynamics through shock wave.",
         "Intermediate",
-        ["1D", "Bubbles", "Euler-Euler"]
+        ["1D", "Bubbles", "Euler-Euler"],
     ),
     PlaybookEntry(
         "2D_lagrange_bubblescreen",
         "2D Lagrangian Bubble Screen",
         "Individual bubble tracking with Euler-Lagrange method.",
         "Intermediate",
-        ["2D", "Bubbles", "Euler-Lagrange"]
+        ["2D", "Bubbles", "Euler-Lagrange"],
     ),
     PlaybookEntry(
         "2D_phasechange_bubble",
         "2D Phase Change Bubble",
         "Phase change and cavitation modeling with 6-equation model.",
         "Advanced",
-        ["2D", "Phase-change", "Cavitation"]
+        ["2D", "Phase-change", "Cavitation"],
     ),
     PlaybookEntry(
         "2D_orszag_tang",
         "2D Orszag-Tang MHD Vortex",
         "Magnetohydrodynamics test problem with complex vortex structures.",
         "Intermediate",
-        ["2D", "MHD"]
+        ["2D", "MHD"],
     ),
     PlaybookEntry(
         "2D_ibm_airfoil",
         "2D IBM Airfoil",
         "Immersed boundary method around a NACA airfoil geometry.",
         "Intermediate",
-        ["2D", "IBM", "Geometry"]
+        ["2D", "IBM", "Geometry"],
     ),
     PlaybookEntry(
         "2D_viscous_shock_tube",
         "2D Viscous Shock Tube",
         "Shock tube with viscous effects and heat transfer.",
         "Intermediate",
-        ["2D", "Viscous", "Shock"]
+        ["2D", "Viscous", "Shock"],
     ),
     PlaybookEntry(
         "3D_TaylorGreenVortex",
         "3D Taylor-Green Vortex",
         "Classic 3D turbulence benchmark with viscous dissipation.",
         "Advanced",
-        ["3D", "Viscous", "Turbulence"]
+        ["3D", "Viscous", "Turbulence"],
     ),
     PlaybookEntry(
         "2D_IGR_triple_point",
         "2D IGR Triple Point",
         "Triple point problem using Iterative Generalized Riemann solver.",
         "Advanced",
-        ["2D", "IGR", "Multiphase"]
+        ["2D", "IGR", "Multiphase"],
     ),
 ]
 
@@ -132,7 +133,10 @@ def validate_playbook_examples():
             print(f"  - {example}", file=sys.stderr)
         print("\nPlease update PLAYBOOK_EXAMPLES in:", file=sys.stderr)
         print(f"  {Path(__file__).relative_to(REPO_ROOT)}", file=sys.stderr)
-        print("\nRemove the missing examples from the list or restore them.", file=sys.stderr)
+        print(
+            "\nRemove the missing examples from the list or restore them.",
+            file=sys.stderr,
+        )
         print("=" * 70, file=sys.stderr)
         sys.exit(1)
 
@@ -149,11 +153,15 @@ def load_case_params(case_dir: str) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
-            check=True
+            check=True,
         )
         params = json.loads(result.stdout)
         return params
-    except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
+    except (
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        subprocess.TimeoutExpired,
+    ) as e:
         print(f"WARNING: Failed to load params from {case_path}: {e}", file=sys.stderr)
         return {}
 
@@ -208,57 +216,63 @@ def get_time_stepper_name(stepper: int | None) -> str:
     return get_value_label("time_stepper", stepper) or "Not specified"
 
 
-def render_playbook_card(entry: PlaybookEntry, summary: Dict[str, Any]) -> str:  # pylint: disable=too-many-branches,too-many-statements
+def render_playbook_card(entry: PlaybookEntry, summary: Dict[str, Any]) -> str:
     """Render a single playbook entry as Markdown"""
     lines = []
 
     tags_str = " · ".join(entry.tags)
-    level_emoji = {"Beginner": "🟢", "Intermediate": "🟡", "Advanced": "🔴"}.get(entry.level, "")
+    level_emoji = {"Beginner": "🟢", "Intermediate": "🟡", "Advanced": "🔴"}.get(
+        entry.level, ""
+    )
 
     lines.append("<details>")
-    lines.append(f'<summary><b>{entry.title}</b> {level_emoji} <i>{entry.level}</i> · <code>{entry.case_dir}</code></summary>\n')
+    lines.append(
+        f"<summary><b>{entry.title}</b> {level_emoji} <i>{entry.level}</i> · <code>{entry.case_dir}</code></summary>\n"
+    )
     lines.append(f"**{entry.description}**\n")
     lines.append(f"**Tags:** {tags_str}\n")
 
     lines.append("**Physics Configuration:**\n")
-    lines.append(f"- **Model:** {get_model_name(summary['model_eqns'])} (`model_eqns = {summary['model_eqns']}`)")
+    lines.append(
+        f"- **Model:** {get_model_name(summary['model_eqns'])} (`model_eqns = {summary['model_eqns']}`)"
+    )
 
-    if summary['num_fluids'] is not None:
+    if summary["num_fluids"] is not None:
         lines.append(f"- **Number of fluids:** {summary['num_fluids']}")
 
     # Dimensionality
-    n, p = summary['n'], summary['p']
+    n, p = summary["n"], summary["p"]
     dim_str = "3D" if p > 0 else ("2D" if n > 0 else "1D")
     lines.append(f"- **Dimensionality:** {dim_str}")
 
-    if summary['cyl_coord']:
+    if summary["cyl_coord"]:
         lines.append("- **Coordinates:** Cylindrical/Axisymmetric")
 
     # Active features
     active_features = []
-    if summary['bubbles_euler']:
+    if summary["bubbles_euler"]:
         active_features.append("Euler-Euler bubbles")
-    if summary['bubbles_lagrange']:
+    if summary["bubbles_lagrange"]:
         active_features.append("Euler-Lagrange bubbles")
-    if summary['qbmm']:
+    if summary["qbmm"]:
         active_features.append("QBMM")
-    if summary['polydisperse']:
+    if summary["polydisperse"]:
         active_features.append("Polydisperse")
-    if summary['surface_tension']:
+    if summary["surface_tension"]:
         active_features.append("Surface tension")
-    if summary['mhd']:
+    if summary["mhd"]:
         active_features.append("MHD")
-    if summary['relax']:
+    if summary["relax"]:
         active_features.append("Phase change")
-    if summary['hypoelasticity']:
+    if summary["hypoelasticity"]:
         active_features.append("Hypoelasticity")
-    if summary['viscous']:
+    if summary["viscous"]:
         active_features.append("Viscous")
-    if summary['ib']:
+    if summary["ib"]:
         active_features.append("Immersed boundaries")
-    if summary['igr']:
+    if summary["igr"]:
         active_features.append("IGR solver")
-    if summary['acoustic_source']:
+    if summary["acoustic_source"]:
         active_features.append("Acoustic sources")
 
     if active_features:
@@ -267,36 +281,40 @@ def render_playbook_card(entry: PlaybookEntry, summary: Dict[str, Any]) -> str: 
     # Numerics
     lines.append("\n**Numerical Methods:**\n")
 
-    if summary['recon_type'] == 1 and summary['weno_order']:
+    if summary["recon_type"] == 1 and summary["weno_order"]:
         lines.append(f"- **Reconstruction:** WENO-{summary['weno_order']}")
-    elif summary['recon_type'] == 2 and summary['muscl_order']:
+    elif summary["recon_type"] == 2 and summary["muscl_order"]:
         lines.append(f"- **Reconstruction:** MUSCL (order {summary['muscl_order']})")
 
-    if summary['riemann_solver']:
-        solver_name = get_riemann_solver_name(summary['riemann_solver'])
-        lines.append(f"- **Riemann solver:** {solver_name} (`riemann_solver = {summary['riemann_solver']}`)")
+    if summary["riemann_solver"]:
+        solver_name = get_riemann_solver_name(summary["riemann_solver"])
+        lines.append(
+            f"- **Riemann solver:** {solver_name} (`riemann_solver = {summary['riemann_solver']}`)"
+        )
 
-    if summary['time_stepper']:
-        stepper_name = get_time_stepper_name(summary['time_stepper'])
+    if summary["time_stepper"]:
+        stepper_name = get_time_stepper_name(summary["time_stepper"])
         lines.append(f"- **Time stepping:** {stepper_name}")
 
     # Links
     lines.append("\n**Related Documentation:**")
-    lines.append(f"- [Model Equations (model_eqns = {summary['model_eqns']})](#model-equations)")
+    lines.append(
+        f"- [Model Equations (model_eqns = {summary['model_eqns']})](#model-equations)"
+    )
 
-    if summary['riemann_solver']:
+    if summary["riemann_solver"]:
         lines.append("- [Riemann Solvers](#riemann-solvers)")
 
-    if summary['bubbles_euler'] or summary['bubbles_lagrange']:
+    if summary["bubbles_euler"] or summary["bubbles_lagrange"]:
         lines.append("- [Bubble Models](#bubble-models)")
 
-    if summary['mhd']:
+    if summary["mhd"]:
         lines.append("- [MHD](#compat-physics-models)")
 
-    if summary['ib']:
+    if summary["ib"]:
         lines.append("- [Immersed Boundaries](#compat-geometry)")
 
-    if summary['viscous']:
+    if summary["viscous"]:
         lines.append("- [Viscosity](#compat-physics-models)")
 
     lines.append("\n</details>\n")
@@ -312,9 +330,7 @@ def generate_playbook() -> str:
 
     lines.append("## 🧩 Case Design Playbook {#case-design-playbook}\n")
     lines.append(
-        "> **Learn by example:** The cases below are curated from MFC's `examples/` "
-        "directory and are validated, working configurations. "
-        "Use them as blueprints for building your own simulations.\n"
+        "> **Learn by example:** The cases below are curated from MFC's `examples/` directory and are validated, working configurations. Use them as blueprints for building your own simulations.\n"
     )
 
     # Group by level
@@ -323,7 +339,9 @@ def generate_playbook() -> str:
         if not level_entries:
             continue
 
-        level_emoji = {"Beginner": "🟢", "Intermediate": "🟡", "Advanced": "🔴"}.get(level, "")
+        level_emoji = {"Beginner": "🟢", "Intermediate": "🟡", "Advanced": "🔴"}.get(
+            level, ""
+        )
         lines.append(f"\n### {level_emoji} {level} Examples\n")
 
         for entry in level_entries:
@@ -334,18 +352,20 @@ def generate_playbook() -> str:
                 summary = summarize_case_params(params)
                 card = render_playbook_card(entry, summary)
                 lines.append(card)
-            except Exception as e:  # pylint: disable=broad-except
-                print(f"WARNING: Failed to process playbook entry '{entry.case_dir}': {e}", file=sys.stderr)
+            except Exception as e:
+                print(
+                    f"WARNING: Failed to process playbook entry '{entry.case_dir}': {e}",
+                    file=sys.stderr,
+                )
                 continue
 
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
 # Markdown rendering
-# ---------------------------------------------------------------------------
 
-def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+
+def render_markdown(rules: Iterable[Rule]) -> str:
     """
     Render user-friendly compatibility tables and summaries.
     """
@@ -362,12 +382,9 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
     lines.append("@page case_constraints Case Creator Guide\n")
     lines.append("# Case Creator Guide\n")
     lines.append(
-        "> **Quick reference** for building MFC cases: working examples, compatibility rules, "
-        "and configuration requirements.\n"
+        "> **Quick reference** for building MFC cases: working examples, compatibility rules, and configuration requirements.\n"
     )
-    lines.append(
-        "> Auto-generated from `case_validator.py` and `examples/`.\n"
-    )
+    lines.append("> Auto-generated from `case_validator.py` and `examples/`.\n")
 
     # Add playbook at the top
     playbook = generate_playbook()
@@ -375,14 +392,30 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
 
     # Define major feature groups (excluding IGR)
     major_features = {
-        "Physics Models": ["mhd", "surface_tension", "hypoelasticity", "hyperelasticity", "relax", "viscous", "acoustic_source"],
-        "Bubble Models": ["bubbles_euler", "bubbles_lagrange", "qbmm", "polydisperse", "adv_n"],
+        "Physics Models": [
+            "mhd",
+            "surface_tension",
+            "hypoelasticity",
+            "hyperelasticity",
+            "relax",
+            "viscous",
+            "acoustic_source",
+        ],
+        "Bubble Models": [
+            "bubbles_euler",
+            "bubbles_lagrange",
+            "qbmm",
+            "polydisperse",
+            "adv_n",
+        ],
         "Numerics": ["riemann_solver", "weno_order", "muscl_order"],
         "Geometry": ["ib", "cyl_coord"],
     }
 
     # 1. Quick Start: Common Configurations
-    lines.append("## 🚀 Common Configuration Patterns {#common-configuration-patterns}\n")
+    lines.append(
+        "## 🚀 Common Configuration Patterns {#common-configuration-patterns}\n"
+    )
     lines.append("Start with these proven combinations:\n")
     lines.append("")
     lines.append("<details open>")
@@ -429,7 +462,7 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
     lines.append("## 📊 Feature Compatibility {#feature-compatibility}\n")
     lines.append("What works together:\n")
 
-    for category, features in major_features.items():  # pylint: disable=too-many-nested-blocks
+    for category, features in major_features.items():
         cat_id = "compat-" + category.lower().replace(" ", "-")
         lines.append(f"\n### {category} {{#{cat_id}}}\n")
 
@@ -556,10 +589,16 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
     # Curated editorial notes keyed by riemann_solver value
     _solver_notes = {
         1: {"best_for": "MHD, elastic materials", "requirements": "—"},
-        2: {"best_for": "Bubbles, phase change, multiphase", "requirements": "`avg_state=2` for bubbles"},
+        2: {
+            "best_for": "Bubbles, phase change, multiphase",
+            "requirements": "`avg_state=2` for bubbles",
+        },
         3: {"best_for": "High accuracy (expensive)", "requirements": "—"},
         4: {"best_for": "MHD (advanced)", "requirements": "MHD only, no relativity"},
-        5: {"best_for": "Robust fallback", "requirements": "Not with cylindrical+viscous"},
+        5: {
+            "best_for": "Robust fallback",
+            "requirements": "Not with cylindrical+viscous",
+        },
     }
 
     lines.append("## ⚙️ Riemann Solvers {#riemann-solvers}\n")
@@ -593,20 +632,32 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
             lines.append(f"- `{rv_param}` = {' or '.join(labeled)}")
         be_recs = be_when_true.get("recommends", [])
         if be_recs:
-            lines.append(f"- Recommended to also set: {', '.join(f'`{r}`' for r in be_recs)}")
+            lines.append(
+                f"- Recommended to also set: {', '.join(f'`{r}`' for r in be_recs)}"
+            )
         lines.append("")
         lines.append("**Extensions:**")
         # Inject polydisperse dependency
         pd_dep = DEPENDENCIES.get("polydisperse", {})
         pd_reqs = pd_dep.get("when_true", {}).get("requires", [])
-        pd_req_str = f" (requires {', '.join(f'`{r}`' for r in pd_reqs)})" if pd_reqs else ""
-        lines.append(f"- `polydisperse = T`: Multiple bubble sizes{pd_req_str}, odd `nb > 1`")
+        pd_req_str = (
+            f" (requires {', '.join(f'`{r}`' for r in pd_reqs)})" if pd_reqs else ""
+        )
+        lines.append(
+            f"- `polydisperse = T`: Multiple bubble sizes{pd_req_str}, odd `nb > 1`"
+        )
         # Inject qbmm dependency
         qb_dep = DEPENDENCIES.get("qbmm", {})
         qb_recs = qb_dep.get("when_true", {}).get("recommends", [])
-        qb_rec_str = f" (recommends {', '.join(f'`{r}`' for r in qb_recs)})" if qb_recs else ""
-        lines.append(f"- `qbmm = T`: Quadrature method{qb_rec_str}, requires `nnode = 4`")
-        lines.append("- `adv_n = T`: Number density advection (requires `num_fluids = 1`)")
+        qb_rec_str = (
+            f" (recommends {', '.join(f'`{r}`' for r in qb_recs)})" if qb_recs else ""
+        )
+        lines.append(
+            f"- `qbmm = T`: Quadrature method{qb_rec_str}, requires `nnode = 4`"
+        )
+        lines.append(
+            "- `adv_n = T`: Number density advection (requires `num_fluids = 1`)"
+        )
         lines.append("</details>\n")
 
         lines.append("<details>")
@@ -659,7 +710,9 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
         if "choices" in constraint:
             labels = constraint.get("value_labels", {})
             if labels:
-                items = [f"`{v}` = {labels[v]}" for v in constraint["choices"] if v in labels]
+                items = [
+                    f"`{v}` = {labels[v]}" for v in constraint["choices"] if v in labels
+                ]
                 schema_parts.append("Choices: " + ", ".join(items))
             else:
                 schema_parts.append(f"Choices: {constraint['choices']}")
@@ -674,7 +727,9 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
         def _render_cond_parts(trigger_str, cond_dict):
             """Render a condition dict into dep_parts entries."""
             if "requires" in cond_dict:
-                dep_parts.append(f"When {trigger_str}, requires: {', '.join(f'`{r}`' for r in cond_dict['requires'])}")
+                dep_parts.append(
+                    f"When {trigger_str}, requires: {', '.join(f'`{r}`' for r in cond_dict['requires'])}"
+                )
             if "requires_value" in cond_dict:
                 rv_items = []
                 for rv_p, rv_vs in cond_dict["requires_value"].items():
@@ -682,7 +737,9 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
                     rv_items.append(f"`{rv_p}` = {' or '.join(labeled)}")
                 dep_parts.append(f"When {trigger_str}, requires {', '.join(rv_items)}")
             if "recommends" in cond_dict:
-                dep_parts.append(f"When {trigger_str}, recommends: {', '.join(f'`{r}`' for r in cond_dict['recommends'])}")
+                dep_parts.append(
+                    f"When {trigger_str}, recommends: {', '.join(f'`{r}`' for r in cond_dict['recommends'])}"
+                )
 
         for cond_key in ["when_true", "when_set"]:
             cond = dep.get(cond_key, {})
@@ -695,10 +752,17 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
                 _render_cond_parts(f"= {wv_val}", wv_cond)
 
         # Skip if nothing to show
-        if not (schema_parts or dep_parts or requirements or incompatibilities or ranges or warnings):
+        if not (
+            schema_parts
+            or dep_parts
+            or requirements
+            or incompatibilities
+            or ranges
+            or warnings
+        ):
             continue
 
-        lines.append(f"\n<details>")
+        lines.append("\n<details>")
         lines.append(f"<summary><b>{title}</b> (`{param}`)</summary>\n")
 
         if schema_parts:
@@ -744,8 +808,7 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
     if all_warnings:
         lines.append("## ⚠️ Physics Warnings {#physics-warnings}\n")
         lines.append(
-            "These checks are **non-fatal** — they print a yellow warning but do not abort the run. "
-            "They catch common mistakes in initial conditions and EOS parameters.\n"
+            "These checks are **non-fatal** — they print a yellow warning but do not abort the run. They catch common mistakes in initial conditions and EOS parameters.\n"
         )
 
         # Group by method
@@ -763,8 +826,14 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
         lines.append("| Check | Stage | Description |")
         lines.append("|-------|-------|-------------|")
         for method, method_rules in sorted(warnings_by_method.items()):
-            title = method_titles.get(method, method.replace("check_", "").replace("_", " ").title())
-            stages_str = ", ".join(sorted(method_rules[0].stages)) if method_rules[0].stages else "all"
+            title = method_titles.get(
+                method, method.replace("check_", "").replace("_", " ").title()
+            )
+            stages_str = (
+                ", ".join(sorted(method_rules[0].stages))
+                if method_rules[0].stages
+                else "all"
+            )
             # Deduplicate messages (loop-expanded may repeat patterns)
             seen_msgs = set()
             descs = []
@@ -774,22 +843,25 @@ def render_markdown(rules: Iterable[Rule]) -> str:  # pylint: disable=too-many-l
                     descs.append(r.message)
             desc_str = "; ".join(descs[:2])
             if len(descs) > 2:
-                desc_str += f" (+{len(descs)-2} more)"
+                desc_str += f" (+{len(descs) - 2} more)"
             lines.append(f"| **{title}** | {stages_str} | {desc_str} |")
 
         lines.append("")
 
     # Add a footer with link to full validator
     lines.append("\n---\n")
-    lines.append("💡 **Tip:** If you encounter a validation error, check the relevant section above or ")
-    lines.append("review [`case_validator.py`](https://github.com/MFlowCode/MFC/blob/master/toolchain/mfc/case_validator.py) for complete validation logic.\n")
+    lines.append(
+        "💡 **Tip:** If you encounter a validation error, check the relevant section above or "
+    )
+    lines.append(
+        "review [`case_validator.py`](https://github.com/MFlowCode/MFC/blob/master/toolchain/mfc/case_validator.py) for complete validation logic.\n"
+    )
 
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
+
 
 def main(as_string: bool = False) -> str:
     """Generate case constraints documentation. Returns markdown string."""

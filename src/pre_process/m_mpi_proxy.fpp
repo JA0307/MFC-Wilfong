@@ -6,29 +6,22 @@
 module m_mpi_proxy
 
 #ifdef MFC_MPI
-    use mpi                    !< Message passing interface (MPI) module
+    use mpi  !< Message passing interface (MPI) module
 #endif
 
     use m_helper
-
-    use m_derived_types         !< Definitions of the derived types
-
-    use m_global_parameters     !< Global parameters for the code
-
+    use m_derived_types      !< Definitions of the derived types
+    use m_global_parameters  !< Global parameters for the code
     use m_mpi_common
 
     implicit none
 
 contains
-    !> Since only processor with rank 0 is in charge of reading
-            !!       and checking the consistency of the user provided inputs,
-            !!       these are not available to the remaining processors. This
-            !!       subroutine is then in charge of broadcasting the required
-            !!       information.
+    !> Since only processor with rank 0 is in charge of reading and checking the consistency of the user provided inputs, these are
+    !! not available to the remaining processors. This subroutine is then in charge of broadcasting the required information.
     impure subroutine s_mpi_bcast_user_inputs
 
 #ifdef MFC_MPI
-
         ! Generic loop iterator
         integer :: i, j
         ! Generic flag used to identify and report MPI errors

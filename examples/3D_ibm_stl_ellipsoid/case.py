@@ -1,5 +1,4 @@
 import json
-import math
 
 Mu = 1.84e-05
 gam_a = 1.4

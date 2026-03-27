@@ -3,8 +3,7 @@
 # + https://doi.org/10.1016/j.compfluid.2013.10.014: 4.4. Multicomponent diffusion test case
 
 import json
-import argparse
-import math
+
 import cantera as ct
 
 ctfile = "gri30.yaml"
@@ -73,6 +72,6 @@ case = {
 
 for i in range(len(sol_L.Y)):
     case[f"chem_wrt_Y({i + 1})"] = "T"
-    case[f"patch_icpp(1)%Y({i+1})"] = 0.0
+    case[f"patch_icpp(1)%Y({i + 1})"] = 0.0
 if __name__ == "__main__":
     print(json.dumps(case))

@@ -10,25 +10,21 @@ This module provides:
 """
 
 import os
-import subprocess
 import re
+import subprocess
 
-from rich.panel import Panel
-from rich.table import Table
-from rich.prompt import Prompt
-from rich.markdown import Markdown
 from rich import box
-
-from .printer import cons
-from .common import MFC_ROOT_DIR
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
 
 # Import command definitions from CLI schema (SINGLE SOURCE OF TRUTH)
 from .cli.commands import COMMANDS
+from .common import MFC_ROOT_DIR
+from .printer import cons
 
-
-# =============================================================================
 # DYNAMIC CLUSTER HELP GENERATION
-# =============================================================================
 
 # Organization mapping based on system name prefixes and known clusters
 CLUSTER_ORGS = {
@@ -56,7 +52,17 @@ SLUG_NAME_OVERRIDE = {
 }
 
 # Display order and colors for organizations
-ORG_ORDER = ["ORNL", "LLNL", "ACCESS", "Georgia Tech", "Caltech", "Brown", "DoD", "Florida", "CSCS"]
+ORG_ORDER = [
+    "ORNL",
+    "LLNL",
+    "ACCESS",
+    "Georgia Tech",
+    "Caltech",
+    "Brown",
+    "DoD",
+    "Florida",
+    "CSCS",
+]
 ORG_COLORS = {
     "ORNL": "yellow",
     "LLNL": "yellow",
@@ -79,8 +85,8 @@ def _parse_modules_file():
 
     try:
         with open(modules_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+            for raw_line in f:
+                line = raw_line.strip()
                 # Skip comments and empty lines
                 if not line or line.startswith("#"):
                     continue
@@ -89,7 +95,7 @@ def _parse_modules_file():
                     continue
 
                 # Parse cluster definition lines: "slug     System Name"
-                match = re.match(r'^(\S+)\s+(.+)$', line)
+                match = re.match(r"^(\S+)\s+(.+)$", line)
                 if match:
                     slug = match.group(1)
                     full_name = match.group(2).strip()
@@ -101,7 +107,10 @@ def _parse_modules_file():
                         # Determine organization from name
                         org = "Other"
                         for prefix, org_name in CLUSTER_ORGS.items():
-                            if prefix in full_name or full_name.lower() == prefix.lower():
+                            if (
+                                prefix in full_name
+                                or full_name.lower() == prefix.lower()
+                            ):
                                 org = org_name
                                 break
 
@@ -120,7 +129,7 @@ def _get_cluster_short_name(slug, full_name):
     # Strip org prefix if present
     for prefix in CLUSTER_ORGS:
         if full_name.startswith(prefix + " "):
-            return full_name[len(prefix) + 1:]
+            return full_name[len(prefix) + 1 :]
     return full_name
 
 
@@ -149,15 +158,21 @@ def _generate_clusters_content():
             f"[cyan]{slug}[/cyan]={_get_cluster_short_name(slug, name)}"
             for slug, name in org_clusters[org]
         ]
-        color = ORG_COLORS.get(org, 'yellow')
+        color = ORG_COLORS.get(org, "yellow")
         cluster_lines.append(f"  [{color}]{org}:[/{color}]    " + "  ".join(entries))
 
     # Handle "Other" if any
     if org_clusters.get("Other"):
-        entries = [f"[cyan]{slug}[/cyan]={name}" for slug, name in org_clusters["Other"]]
-        cluster_lines.append(f"  [yellow]Other:[/yellow]    " + "  ".join(entries))
+        entries = [
+            f"[cyan]{slug}[/cyan]={name}" for slug, name in org_clusters["Other"]
+        ]
+        cluster_lines.append("  [yellow]Other:[/yellow]    " + "  ".join(entries))
 
-    cluster_list = "\n".join(cluster_lines) if cluster_lines else "  [dim]No clusters found in modules file[/dim]"
+    cluster_list = (
+        "\n".join(cluster_lines)
+        if cluster_lines
+        else "  [dim]No clusters found in modules file[/dim]"
+    )
 
     # Return full help content with dynamic cluster list
     return f"""\
@@ -187,9 +202,7 @@ MFC includes pre-configured module sets for many clusters.
   • CMake 3.18+, Python 3.11+"""
 
 
-# =============================================================================
 # MARKDOWN-BASED HELP (Single source of truth from docs/)
-# =============================================================================
 
 # Mapping of help topics to their source markdown files and optional section
 # Format: {"topic": ("file_path", "section_heading" or None for full file)}
@@ -197,7 +210,10 @@ MARKDOWN_HELP_FILES = {
     "debugging": ("docs/documentation/troubleshooting.md", None),  # Full file
     "gpu": ("docs/documentation/running.md", "Running on GPUs"),  # Section only
     "batch": ("docs/documentation/running.md", "Batch Execution"),  # Section only
-    "performance": ("docs/documentation/expectedPerformance.md", "Achieving Maximum Performance"),
+    "performance": (
+        "docs/documentation/expectedPerformance.md",
+        "Achieving Maximum Performance",
+    ),
 }
 
 
@@ -209,7 +225,7 @@ def _extract_markdown_section(content: str, section_heading: str) -> str:
     """
     # Find the section heading (## or ###)
     # Note: In f-strings, literal braces must be doubled: {{1,3}} -> {1,3}
-    pattern = rf'^(#{{1,3}})\s+{re.escape(section_heading)}\s*$'
+    pattern = rf"^(#{{1,3}})\s+{re.escape(section_heading)}\s*$"
     match = re.search(pattern, content, re.MULTILINE)
     if not match:
         return None
@@ -219,11 +235,11 @@ def _extract_markdown_section(content: str, section_heading: str) -> str:
     # Find the end: horizontal rule (---) which separates major sections
     # Note: We use --- instead of heading detection because shell comments
     # inside code blocks (# comment) look like markdown headings to regex
-    end_pattern = r'^---'
+    end_pattern = r"^---"
     end_match = re.search(end_pattern, content[start_pos:], re.MULTILINE)
 
     if end_match:
-        section = content[start_pos:start_pos + end_match.start()]
+        section = content[start_pos : start_pos + end_match.start()]
     else:
         section = content[start_pos:]
 
@@ -256,26 +272,26 @@ def _load_markdown_help(topic: str) -> str:
 
     # Strip Doxygen-specific syntax
     # Remove @page directives
-    content = re.sub(r'^@page\s+\S+\s+.*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r"^@page\s+\S+\s+.*$", "", content, flags=re.MULTILINE)
     # Remove @ref, @see directives (but keep the text after them readable)
-    content = re.sub(r'@(ref|see)\s+"([^"]+)"', r'\2', content)  # @ref "Text" -> Text
-    content = re.sub(r'@(ref|see)\s+(\S+)', '', content)  # @ref name -> (remove)
+    content = re.sub(r'@(ref|see)\s+"([^"]+)"', r"\2", content)  # @ref "Text" -> Text
+    content = re.sub(r"@(ref|see)\s+(\S+)", "", content)  # @ref name -> (remove)
     # Clean up any resulting empty lines at the start
-    content = content.lstrip('\n')
+    content = content.lstrip("\n")
 
     return content
 
 
 def _generate_markdown_help(topic: str):
     """Generate a function that loads markdown help for a topic."""
+
     def loader():
         return _load_markdown_help(topic)
+
     return loader
 
 
-# =============================================================================
 # HELP TOPICS
-# =============================================================================
 
 HELP_TOPICS = {
     "gpu": {
@@ -342,23 +358,23 @@ def print_topic_help(topic: str):
         cons.raw.print(Markdown(content))
     else:
         # Render as Rich markup in a panel
-        cons.raw.print(Panel(
-            content,
-            title=f"[bold]{topic_info['title']}[/bold]",
-            box=box.ROUNDED,
-            padding=(1, 2)
-        ))
+        cons.raw.print(
+            Panel(
+                content,
+                title=f"[bold]{topic_info['title']}[/bold]",
+                box=box.ROUNDED,
+                padding=(1, 2),
+            )
+        )
     cons.print()
 
 
 def print_help_topics():
     """Print list of available help topics."""
     cons.print()
-    cons.raw.print(Panel(
-        "[bold cyan]MFC Help System[/bold cyan]",
-        box=box.ROUNDED,
-        padding=(0, 2)
-    ))
+    cons.raw.print(
+        Panel("[bold cyan]MFC Help System[/bold cyan]", box=box.ROUNDED, padding=(0, 2))
+    )
     cons.print()
 
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
@@ -375,15 +391,14 @@ def print_help_topics():
     cons.print()
 
 
-# =============================================================================
 # ENHANCED HELP OUTPUT
-# =============================================================================
+
 
 def _truncate_desc(desc: str, max_len: int = 50) -> str:
     """Truncate description to fit compact display."""
     if len(desc) <= max_len:
         return desc
-    return desc[:max_len-3] + "..."
+    return desc[: max_len - 3] + "..."
 
 
 def print_help():
@@ -420,7 +435,9 @@ def print_help():
     cons.print()
 
     # Quick start - single line
-    cons.print("[bold]Quick start:[/bold] [cyan]./mfc.sh new my_case[/cyan] → edit case.py → [cyan]./mfc.sh build[/cyan] → [cyan]./mfc.sh run[/cyan]")
+    cons.print(
+        "[bold]Quick start:[/bold] [cyan]./mfc.sh new my_case[/cyan] → edit case.py → [cyan]./mfc.sh build[/cyan] → [cyan]./mfc.sh run[/cyan]"
+    )
 
     # Footer
     cons.print("[dim]Run ./mfc.sh <command> --help for options[/dim]")
@@ -439,12 +456,13 @@ def print_command_help(command: str, show_argparse: bool = True):
 
     # Header panel
     cons.print()
-    cons.raw.print(Panel(
-        f"[bold cyan]{command}[/bold cyan]{alias_str}\n"
-        f"[dim]{cmd['description']}[/dim]",
-        box=box.ROUNDED,
-        padding=(0, 2)
-    ))
+    cons.raw.print(
+        Panel(
+            f"[bold cyan]{command}[/bold cyan]{alias_str}\n[dim]{cmd['description']}[/dim]",
+            box=box.ROUNDED,
+            padding=(0, 2),
+        )
+    )
     cons.print()
 
     # Examples
@@ -471,9 +489,8 @@ def print_command_help(command: str, show_argparse: bool = True):
     return True
 
 
-# =============================================================================
 # CONTEXTUAL TIPS
-# =============================================================================
+
 
 class Tips:
     """Contextual tips shown after various events."""
@@ -482,16 +499,18 @@ class Tips:
     def after_build_failure():
         """Show tips after a build failure."""
         cons.print()
-        cons.raw.print(Panel(
-            "[bold yellow]Troubleshooting Tips[/bold yellow]\n\n"
-            "  [cyan]1.[/cyan] Rebuild with [green]--debug[/green] for debug compiler flags and verbose output\n"
-            "  [cyan]2.[/cyan] Check [green]docs/documentation/troubleshooting.md[/green]\n"
-            "  [cyan]3.[/cyan] Ensure required modules are loaded: [green]source ./mfc.sh load -c <cluster> -m <mode>[/green]\n"
-            "  [cyan]4.[/cyan] Try [green]./mfc.sh clean[/green] and rebuild",
-            box=box.ROUNDED,
-            border_style="yellow",
-            padding=(0, 2)
-        ))
+        cons.raw.print(
+            Panel(
+                "[bold yellow]Troubleshooting Tips[/bold yellow]\n\n"
+                "  [cyan]1.[/cyan] Rebuild with [green]--debug[/green] for debug compiler flags and verbose output\n"
+                "  [cyan]2.[/cyan] Check [green]docs/documentation/troubleshooting.md[/green]\n"
+                "  [cyan]3.[/cyan] Ensure required modules are loaded: [green]source ./mfc.sh load -c <cluster> -m <mode>[/green]\n"
+                "  [cyan]4.[/cyan] Try [green]./mfc.sh clean[/green] and rebuild",
+                box=box.ROUNDED,
+                border_style="yellow",
+                padding=(0, 2),
+            )
+        )
 
     @staticmethod
     def after_case_error(case_path: str = None):
@@ -503,7 +522,9 @@ class Tips:
             msg += "  Run [green]./mfc.sh validate <case.py>[/green] to check your case file for errors"
 
         cons.print()
-        cons.raw.print(Panel(msg, box=box.ROUNDED, border_style="yellow", padding=(0, 2)))
+        cons.raw.print(
+            Panel(msg, box=box.ROUNDED, border_style="yellow", padding=(0, 2))
+        )
 
     @staticmethod
     def after_test_failure(failed_uuids: list = None):
@@ -522,33 +543,40 @@ class Tips:
                 lines.append(f"    [red]•[/red] {uuid}")
 
         cons.print()
-        cons.raw.print(Panel("\n".join(lines), box=box.ROUNDED, border_style="yellow", padding=(0, 2)))
+        cons.raw.print(
+            Panel(
+                "\n".join(lines), box=box.ROUNDED, border_style="yellow", padding=(0, 2)
+            )
+        )
 
     @staticmethod
     def after_run_failure():
         """Show tips after a run failure."""
         cons.print()
-        cons.raw.print(Panel(
-            "[bold yellow]Troubleshooting Tips[/bold yellow]\n\n"
-            "  [cyan]1.[/cyan] Validate your case: [green]./mfc.sh validate case.py[/green]\n"
-            "  [cyan]2.[/cyan] Check the output in [green]<case_dir>/[/green]\n"
-            "  [cyan]3.[/cyan] Rebuild with [green]--debug[/green] for debug compiler flags\n"
-            "  [cyan]4.[/cyan] Check MFC documentation: [green]docs/[/green]",
-            box=box.ROUNDED,
-            border_style="yellow",
-            padding=(0, 2)
-        ))
+        cons.raw.print(
+            Panel(
+                "[bold yellow]Troubleshooting Tips[/bold yellow]\n\n"
+                "  [cyan]1.[/cyan] Validate your case: [green]./mfc.sh validate case.py[/green]\n"
+                "  [cyan]2.[/cyan] Check the output in [green]<case_dir>/[/green]\n"
+                "  [cyan]3.[/cyan] Rebuild with [green]--debug[/green] for debug compiler flags\n"
+                "  [cyan]4.[/cyan] Check MFC documentation: [green]docs/[/green]",
+                box=box.ROUNDED,
+                border_style="yellow",
+                padding=(0, 2),
+            )
+        )
 
     @staticmethod
     def suggest_validate():
         """Generic suggestion to use validate."""
         cons.print()
-        cons.print("[dim]Tip: Run [cyan]./mfc.sh validate case.py[/cyan] to check for errors before running[/dim]")
+        cons.print(
+            "[dim]Tip: Run [cyan]./mfc.sh validate case.py[/cyan] to check for errors before running[/dim]"
+        )
 
 
-# =============================================================================
 # ONBOARDING FOR NEW USERS
-# =============================================================================
+
 
 def is_first_time_user() -> bool:
     """Check if this is a first-time user (no build directory)."""
@@ -559,44 +587,47 @@ def is_first_time_user() -> bool:
 def print_welcome():
     """Print welcome message for new users."""
     cons.print()
-    cons.raw.print(Panel(
-        "[bold cyan]Welcome to MFC![/bold cyan]\n\n"
-        "It looks like this is your first time using MFC. Here's how to get started:\n\n"
-        "  [green]1.[/green] [bold]Load environment[/bold] (HPC clusters):\n"
-        "     [cyan]source ./mfc.sh load -c <cluster> -m <mode>[/cyan]\n"
-        "     Example: [dim]source ./mfc.sh load -c p -m g[/dim] (Phoenix, GPU)\n\n"
-        "  [green]2.[/green] [bold]Create a new case[/bold]:\n"
-        "     [cyan]./mfc.sh new my_first_case[/cyan]\n\n"
-        "  [green]3.[/green] [bold]Build MFC[/bold]:\n"
-        "     [cyan]./mfc.sh build -j $(nproc)[/cyan]\n\n"
-        "  [green]4.[/green] [bold]Run your simulation[/bold]:\n"
-        "     [cyan]./mfc.sh run my_first_case/case.py[/cyan]\n\n"
-        "[bold yellow]Optional:[/bold yellow] Enable tab completion for your shell:\n"
-        "     [cyan]./mfc.sh completion install[/cyan]\n\n"
-        "[dim]Run [cyan]./mfc.sh --help[/cyan] for all available commands[/dim]\n"
-        "[dim]Run [cyan]./mfc.sh interactive[/cyan] for a guided menu[/dim]",
-        title="[bold]Getting Started[/bold]",
-        box=box.DOUBLE,
-        border_style="cyan",
-        padding=(1, 2)
-    ))
+    cons.raw.print(
+        Panel(
+            "[bold cyan]Welcome to MFC![/bold cyan]\n\n"
+            "It looks like this is your first time using MFC. Here's how to get started:\n\n"
+            "  [green]1.[/green] [bold]Load environment[/bold] (HPC clusters):\n"
+            "     [cyan]source ./mfc.sh load -c <cluster> -m <mode>[/cyan]\n"
+            "     Example: [dim]source ./mfc.sh load -c p -m g[/dim] (Phoenix, GPU)\n\n"
+            "  [green]2.[/green] [bold]Create a new case[/bold]:\n"
+            "     [cyan]./mfc.sh new my_first_case[/cyan]\n\n"
+            "  [green]3.[/green] [bold]Build MFC[/bold]:\n"
+            "     [cyan]./mfc.sh build -j $(nproc)[/cyan]\n\n"
+            "  [green]4.[/green] [bold]Run your simulation[/bold]:\n"
+            "     [cyan]./mfc.sh run my_first_case/case.py[/cyan]\n\n"
+            "[bold yellow]Optional:[/bold yellow] Enable tab completion for your shell:\n"
+            "     [cyan]./mfc.sh completion install[/cyan]\n\n"
+            "[dim]Run [cyan]./mfc.sh --help[/cyan] for all available commands[/dim]\n"
+            "[dim]Run [cyan]./mfc.sh interactive[/cyan] for a guided menu[/dim]",
+            title="[bold]Getting Started[/bold]",
+            box=box.DOUBLE,
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
     cons.print()
 
 
-# =============================================================================
 # INTERACTIVE MODE
-# =============================================================================
+
 
 def interactive_mode():
     """Run interactive menu-driven interface."""
 
     while True:
         cons.print()
-        cons.raw.print(Panel(
-            "[bold cyan]MFC Interactive Mode[/bold cyan]",
-            box=box.ROUNDED,
-            padding=(0, 2)
-        ))
+        cons.raw.print(
+            Panel(
+                "[bold cyan]MFC Interactive Mode[/bold cyan]",
+                box=box.ROUNDED,
+                padding=(0, 2),
+            )
+        )
         cons.print()
 
         # Menu options
@@ -618,7 +649,11 @@ def interactive_mode():
                 cons.print(f"  [green]{key}[/green]) {label}")
 
         cons.print()
-        choice = Prompt.ask("[bold]Select an option[/bold]", choices=[o[0] for o in options], default="q")
+        choice = Prompt.ask(
+            "[bold]Select an option[/bold]",
+            choices=[o[0] for o in options],
+            default="q",
+        )
 
         if choice == "q":
             cons.print("[dim]Goodbye![/dim]")
@@ -666,7 +701,9 @@ def _interactive_new():
     cons.print()
 
     # Show templates
-    cons.print("Available templates: [cyan]1D_minimal[/cyan], [cyan]2D_minimal[/cyan], [cyan]3D_minimal[/cyan]")
+    cons.print(
+        "Available templates: [cyan]1D_minimal[/cyan], [cyan]2D_minimal[/cyan], [cyan]3D_minimal[/cyan]"
+    )
     cons.print("[dim]Or use 'example:<name>' to copy from examples[/dim]")
     cons.print()
 
@@ -727,7 +764,11 @@ def _interactive_clean():
     cons.print("[bold]Clean Build Files[/bold]")
     cons.print()
 
-    confirm = Prompt.ask("Are you sure you want to clean all build files?", choices=["y", "n"], default="n")
+    confirm = Prompt.ask(
+        "Are you sure you want to clean all build files?",
+        choices=["y", "n"],
+        default="n",
+    )
 
     if confirm == "y":
         _run_mfc_command(["./mfc.sh", "clean"])

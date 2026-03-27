@@ -9,8 +9,12 @@ import dataclasses
 from typing import Dict, Tuple
 
 from .schema import (
-    CLISchema, Command, Argument, Positional,
-    ArgAction, CommonArgumentSet
+    ArgAction,
+    Argument,
+    CLISchema,
+    Command,
+    CommonArgumentSet,
+    Positional,
 )
 
 
@@ -61,7 +65,7 @@ def _add_positional(parser: argparse.ArgumentParser, pos: Positional):
         "metavar": pos.name.upper(),
     }
 
-    if pos.type != str:
+    if pos.type is not str:
         kwargs["type"] = pos.type
     if pos.nargs is not None:
         kwargs["nargs"] = pos.nargs
@@ -80,51 +84,48 @@ def _add_mfc_config_arguments(parser: argparse.ArgumentParser, config):
     This handles --mpi/--no-mpi, --gpu/--no-gpu, etc. from MFCConfig dataclass.
     """
     # Import here to avoid circular dependency
-    from ..state import gpuConfigOptions  # pylint: disable=import-outside-toplevel
+    from ..state import gpuConfigOptions
 
     for f in dataclasses.fields(config):
-        if f.name == 'gpu':
+        if f.name == "gpu":
             parser.add_argument(
                 f"--{f.name}",
                 action="store",
-                nargs='?',
+                nargs="?",
                 const=gpuConfigOptions.ACC.value,
                 default=gpuConfigOptions.NONE.value,
                 dest=f.name,
                 choices=[e.value for e in gpuConfigOptions],
-                help=f"Turn the {f.name} option to OpenACC or OpenMP."
+                help=f"Turn the {f.name} option to OpenACC or OpenMP.",
             )
             parser.add_argument(
                 f"--no-{f.name}",
                 action="store_const",
                 const=gpuConfigOptions.NONE.value,
                 dest=f.name,
-                help=f"Turn the {f.name} option OFF."
+                help=f"Turn the {f.name} option OFF.",
             )
         else:
             parser.add_argument(
-                f"--{f.name}",
-                action="store_true",
-                help=f"Turn the {f.name} option ON."
+                f"--{f.name}", action="store_true", help=f"Turn the {f.name} option ON."
             )
             parser.add_argument(
                 f"--no-{f.name}",
                 action="store_false",
                 dest=f.name,
-                help=f"Turn the {f.name} option OFF."
+                help=f"Turn the {f.name} option OFF.",
             )
 
-    parser.set_defaults(**{
-        f.name: getattr(config, f.name)
-        for f in dataclasses.fields(config)
-    })
+    parser.set_defaults(
+        **{f.name: getattr(config, f.name) for f in dataclasses.fields(config)}
+    )
 
 
 def _add_common_arguments(
     parser: argparse.ArgumentParser,
     command: Command,
     common_sets: Dict[str, CommonArgumentSet],
-    config=None
+    config=None,
 ):
     """Add common arguments to a command parser."""
     for set_name in command.include_common:
@@ -141,10 +142,7 @@ def _add_common_arguments(
 
 
 def _add_command_subparser(
-    subparsers,
-    cmd: Command,
-    common_sets: Dict[str, CommonArgumentSet],
-    config
+    subparsers, cmd: Command, common_sets: Dict[str, CommonArgumentSet], config
 ) -> argparse.ArgumentParser:
     """Add a single command's subparser and return it."""
     subparser = subparsers.add_parser(
@@ -190,7 +188,7 @@ def _add_command_subparser(
 
 def generate_parser(
     schema: CLISchema,
-    config=None  # MFCConfig instance
+    config=None,  # MFCConfig instance
 ) -> Tuple[argparse.ArgumentParser, Dict[str, argparse.ArgumentParser]]:
     """
     Generate complete argparse parser from schema.
@@ -221,6 +219,8 @@ def generate_parser(
     subparser_map: Dict[str, argparse.ArgumentParser] = {}
 
     for cmd in schema.commands:
-        subparser_map[cmd.name] = _add_command_subparser(subparsers, cmd, common_sets, config)
+        subparser_map[cmd.name] = _add_command_subparser(
+            subparsers, cmd, common_sets, config
+        )
 
     return parser, subparser_map

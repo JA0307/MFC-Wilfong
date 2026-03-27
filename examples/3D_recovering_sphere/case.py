@@ -2,7 +2,6 @@
 # This simulation shows the early stages of a cubic droplet recovering a spherical shape due to capillary
 # forces. While the relaxation is not complete, it demonstrates the expecteed symmetric behavior.
 
-import math
 import json
 
 l = 0.375

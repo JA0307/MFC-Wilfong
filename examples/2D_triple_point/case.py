@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import math
 import json
 
 eps = 1e-8

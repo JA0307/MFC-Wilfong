@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import math
 import json
 
 # Single bubble collapse
@@ -155,6 +154,7 @@ print(
             "lag_params%valmaxvoid": 0.9,
             "lag_params%write_bubbles": "F",
             "lag_params%write_bubbles_stats": "F",
+            "lag_params%write_void_evol": "T",
             # Bubble parameters
             "bub_pp%R0ref": 1.0,
             "bub_pp%p0ref": 1.0,

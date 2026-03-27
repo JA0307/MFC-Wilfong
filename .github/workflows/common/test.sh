@@ -8,12 +8,26 @@ set -euo pipefail
 source .github/scripts/gpu-opts.sh
 build_opts="$gpu_opts"
 
+# --- Phoenix TMPDIR setup ---
+# Phoenix compute nodes have a small /tmp. With 8 parallel test threads each
+# spawning MPI processes, it fills up and ORTE session dir creation fails.
+# Redirect TMPDIR to project storage, same as bench.sh.
+if [ "$job_cluster" = "phoenix" ]; then
+    tmpbuild=/storage/project/r-sbryngelson3-0/sbryngelson3/mytmp_build
+    currentdir=$tmpbuild/run-$(( RANDOM % 9000 ))
+    mkdir -p $tmpbuild
+    mkdir -p $currentdir
+    export TMPDIR=$currentdir
+    trap 'rm -rf "$currentdir" || true' EXIT
+fi
+
 # --- Build (if not pre-built on login node) ---
 # Phoenix builds inside SLURM; Frontier pre-builds via build.sh on the login node.
 # Phoenix builds inside SLURM on heterogeneous compute nodes — always start fresh
 # to avoid SIGILL from stale binaries compiled on a different microarchitecture.
 if [ "$job_cluster" = "phoenix" ]; then
-    rm -rf build
+    source .github/scripts/clean-build.sh
+    clean_build
 fi
 
 if [ ! -d "build" ]; then
@@ -68,4 +82,10 @@ if [ -n "${job_shard:-}" ]; then
     shard_opts="--shard $job_shard"
 fi
 
-./mfc.sh test -v --max-attempts 3 -a -j $n_test_threads $rdma_opts $device_opts $build_opts $shard_opts -- -c $job_cluster
+# Only prune tests on PRs; master pushes must run the full suite.
+prune_flag=""
+if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
+    prune_flag="--only-changes"
+fi
+
+./mfc.sh test -v --max-attempts 3 $prune_flag -a -j $n_test_threads $rdma_opts $device_opts $build_opts $shard_opts -- -c $job_cluster

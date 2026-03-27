@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import sys
+import argparse
 import json
 import math
+import sys
 import typing
-import argparse
 
 parser = argparse.ArgumentParser(
     prog="scaling_and_perf",
@@ -32,9 +32,28 @@ parser.add_argument(
     metavar="MEMORY",
     help="Weak scaling: memory per rank in GB. Strong scaling: global memory in GB. Used to determine cell count.",
 )
-parser.add_argument("--rdma_mpi", metavar="RDMA", type=str, choices=["T", "F"], default="F", help="Enable RDMA-aware MPI optimizations.")
-parser.add_argument("--n-steps", metavar="N", type=int, default=20, help="Number of time steps to simulate.")
-parser.add_argument("--n-save", metavar="NS", type=int, default=20, help="Number of time steps between saves.")
+parser.add_argument(
+    "--rdma_mpi",
+    metavar="RDMA",
+    type=str,
+    choices=["T", "F"],
+    default="F",
+    help="Enable RDMA-aware MPI optimizations.",
+)
+parser.add_argument(
+    "--n-steps",
+    metavar="N",
+    type=int,
+    default=20,
+    help="Number of time steps to simulate.",
+)
+parser.add_argument(
+    "--n-save",
+    metavar="NS",
+    type=int,
+    default=20,
+    help="Number of time steps between saves.",
+)
 args = parser.parse_args()
 
 if args.scaling is None:
@@ -54,12 +73,16 @@ def closest_three_factors(n):
     min_range = float("inf")
 
     # Iterate over possible first factor a
-    for factor_one in range(1, int(n ** (1 / 3)) + 2):  # factor_one should be around the cube root of n
+    for factor_one in range(
+        1, int(n ** (1 / 3)) + 2
+    ):  # factor_one should be around the cube root of n
         if n % factor_one == 0:
             n1 = n // factor_one  # Remaining part
 
             # Iterate over possible second factor b
-            for factor_two in range(factor_one, int(math.sqrt(n1)) + 2):  # factor_two should be around sqrt of n1
+            for factor_two in range(
+                factor_one, int(math.sqrt(n1)) + 2
+            ):  # factor_two should be around sqrt of n1
                 if n1 % factor_two == 0:
                     factor_three = n1 // factor_two  # Third factor
 
@@ -75,7 +98,9 @@ def nxyz_from_ncells_weak(ncells: float) -> typing.Tuple[int, int, int]:
     s = math.floor(ncells ** (1 / 3))
     ND = closest_three_factors(nranks)
     if any(N < 4 for N in ND) and nranks > 64:
-        raise RuntimeError(f"Cannot represent {nranks} ranks with at least 4 partitions in each direction.")
+        raise RuntimeError(
+            f"Cannot represent {nranks} ranks with at least 4 partitions in each direction."
+        )
     N1 = ND[0] * s - 1
     N2 = ND[1] * s - 1
     N3 = ND[2] * s - 1
@@ -127,14 +152,18 @@ Min = 2.4
 
 # Pos to pre shock ratios - AIR
 psOp0a = (Min**2 - 1) * 2 * gama / (gama + 1) + 1  # pressure
-rhosOrho0a = (1 + (gama + 1) / (gama - 1) * psOp0a) / ((gama + 1) / (gama - 1) + psOp0a)  # density
+rhosOrho0a = (1 + (gama + 1) / (gama - 1) * psOp0a) / (
+    (gama + 1) / (gama - 1) + psOp0a
+)  # density
 ss = Min * c_a  # shock speed of sound - m/s
 
 # post-shock conditions - AIR
 ps = psOp0a * p0a  # pressure - Pa
 rhos = rhosOrho0a * rho0a  # density - kg / m3
 c_s = math.sqrt(gama * (ps + pia) / rhos)  # post shock speed of sound - m/s
-vel = c_a / gama * (psOp0a - 1.0) * p0a / (p0a + pia) / Min  # velocity at the post shock - m/s
+vel = (
+    c_a / gama * (psOp0a - 1.0) * p0a / (p0a + pia) / Min
+)  # velocity at the post shock - m/s
 
 # Domain extents
 xb = -Lx * D0 / 2

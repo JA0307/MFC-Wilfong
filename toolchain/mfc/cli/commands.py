@@ -10,43 +10,62 @@ All command definitions live here. This file is used to generate:
 When adding a new command or option, ONLY modify this file.
 Then run `./mfc.sh generate` to update completions.
 """
-# pylint: disable=too-many-lines
 
 from .schema import (
-    CLISchema, Command, Argument, Positional, Example,
-    ArgAction, Completion, CompletionType,
-    CommonArgumentSet, MutuallyExclusiveGroup
+    ArgAction,
+    Argument,
+    CLISchema,
+    Command,
+    CommonArgumentSet,
+    Completion,
+    CompletionType,
+    Example,
+    MutuallyExclusiveGroup,
+    Positional,
 )
 
-
-# =============================================================================
 # CONSTANTS (shared with other modules)
-# =============================================================================
 
 TARGET_NAMES = [
-    'fftw', 'hdf5', 'silo', 'lapack', 'hipfort',
-    'pre_process', 'simulation', 'post_process',
-    'syscheck', 'documentation'
+    "fftw",
+    "hdf5",
+    "silo",
+    "lapack",
+    "hipfort",
+    "pre_process",
+    "simulation",
+    "post_process",
+    "syscheck",
+    "documentation",
 ]
 
-DEFAULT_TARGET_NAMES = ['pre_process', 'simulation', 'post_process']
+DEFAULT_TARGET_NAMES = ["pre_process", "simulation", "post_process"]
 
 TEMPLATE_NAMES = [
-    'bridges2', 'carpenter', 'carpenter-cray', 'default',
-    'delta', 'deltaai', 'frontier', 'hipergator', 'nautilus',
-    'oscar', 'phoenix', 'phoenix-bench', 'santis', 'tuo'
+    "bridges2",
+    "carpenter",
+    "carpenter-cray",
+    "default",
+    "delta",
+    "deltaai",
+    "frontier",
+    "hipergator",
+    "nautilus",
+    "oscar",
+    "phoenix",
+    "phoenix-bench",
+    "santis",
+    "tuo",
 ]
 
-GPU_OPTIONS = ['acc', 'mp']
+GPU_OPTIONS = ["acc", "mp"]
 
-ENGINE_OPTIONS = ['interactive', 'batch']
+ENGINE_OPTIONS = ["interactive", "batch"]
 
-MPI_BINARIES = ['mpirun', 'jsrun', 'srun', 'mpiexec']
+MPI_BINARIES = ["mpirun", "jsrun", "srun", "mpiexec"]
 
 
-# =============================================================================
 # COMMON ARGUMENT SETS
-# =============================================================================
 
 COMMON_TARGETS = CommonArgumentSet(
     name="targets",
@@ -62,7 +81,7 @@ COMMON_TARGETS = CommonArgumentSet(
             metavar="TARGET",
             completion=Completion(type=CompletionType.CHOICES, choices=TARGET_NAMES),
         ),
-    ]
+    ],
 )
 
 COMMON_JOBS = CommonArgumentSet(
@@ -76,7 +95,7 @@ COMMON_JOBS = CommonArgumentSet(
             default=1,
             metavar="JOBS",
         ),
-    ]
+    ],
 )
 
 COMMON_VERBOSE = CommonArgumentSet(
@@ -89,7 +108,7 @@ COMMON_VERBOSE = CommonArgumentSet(
             action=ArgAction.COUNT,
             default=0,
         ),
-    ]
+    ],
 )
 
 COMMON_DEBUG_LOG = CommonArgumentSet(
@@ -102,7 +121,7 @@ COMMON_DEBUG_LOG = CommonArgumentSet(
             action=ArgAction.STORE_TRUE,
             dest="debug_log",
         ),
-    ]
+    ],
 )
 
 COMMON_GPUS = CommonArgumentSet(
@@ -116,7 +135,7 @@ COMMON_GPUS = CommonArgumentSet(
             type=int,
             default=None,
         ),
-    ]
+    ],
 )
 
 # MFCConfig flags are handled specially in argparse_gen.py
@@ -128,9 +147,7 @@ COMMON_MFC_CONFIG = CommonArgumentSet(
 )
 
 
-# =============================================================================
 # COMMAND DEFINITIONS
-# =============================================================================
 
 BUILD_COMMAND = Command(
     name="build",
@@ -159,7 +176,10 @@ BUILD_COMMAND = Command(
         Example("./mfc.sh build", "Build all default targets (CPU)"),
         Example("./mfc.sh build -j 8", "Build with 8 parallel jobs"),
         Example("./mfc.sh build --gpu", "Build with GPU (OpenACC) support"),
-        Example("./mfc.sh build -i case.py --case-optimization -j 8", "Case optimization (10x faster!)"),
+        Example(
+            "./mfc.sh build -i case.py --case-optimization -j 8",
+            "Case optimization (10x faster!)",
+        ),
     ],
     key_options=[
         ("-j, --jobs N", "Number of parallel build jobs"),
@@ -344,8 +364,14 @@ RUN_COMMAND = Command(
     examples=[
         Example("./mfc.sh run case.py", "Run interactively with 1 rank"),
         Example("./mfc.sh run case.py -n 4", "Run with 4 MPI ranks"),
-        Example("./mfc.sh run case.py --case-optimization -j 8", "10x faster with case optimization!"),
-        Example("./mfc.sh run case.py -e batch -N 2 -n 4", "Submit batch job: 2 nodes, 4 ranks/node"),
+        Example(
+            "./mfc.sh run case.py --case-optimization -j 8",
+            "10x faster with case optimization!",
+        ),
+        Example(
+            "./mfc.sh run case.py -e batch -N 2 -n 4",
+            "Submit batch job: 2 nodes, 4 ranks/node",
+        ),
     ],
     key_options=[
         ("--case-optimization", "Hard-code params for 10x speedup!"),
@@ -458,36 +484,66 @@ TEST_COMMAND = Command(
             type=str,
             default=None,
         ),
+        Argument(
+            name="build-coverage-cache",
+            help="Run all tests with gcov instrumentation to build the file-level coverage cache. Pass --gcov to enable coverage instrumentation in the internal build step.",
+            action=ArgAction.STORE_TRUE,
+            default=False,
+            dest="build_coverage_cache",
+        ),
+        Argument(
+            name="only-changes",
+            help="Only run tests whose covered files overlap with files changed since branching from master (uses file-level gcov coverage cache).",
+            action=ArgAction.STORE_TRUE,
+            default=False,
+            dest="only_changes",
+        ),
+        Argument(
+            name="changes-branch",
+            help="Branch to compare against for --only-changes (default: master).",
+            type=str,
+            default="master",
+            dest="changes_branch",
+        ),
     ],
     mutually_exclusive=[
-        MutuallyExclusiveGroup(arguments=[
-            Argument(
-                name="generate",
-                help="(Test Generation) Generate golden files.",
-                action=ArgAction.STORE_TRUE,
-                default=False,
-            ),
-            Argument(
-                name="add-new-variables",
-                help="(Test Generation) If new variables are found in D/ when running tests, add them to the golden files.",
-                action=ArgAction.STORE_TRUE,
-                default=False,
-                dest="add_new_variables",
-            ),
-            Argument(
-                name="remove-old-tests",
-                help="(Test Generation) Delete test directories that are no longer needed.",
-                action=ArgAction.STORE_TRUE,
-                default=False,
-                dest="remove_old_tests",
-            ),
-        ]),
+        MutuallyExclusiveGroup(
+            arguments=[
+                Argument(
+                    name="generate",
+                    help="(Test Generation) Generate golden files.",
+                    action=ArgAction.STORE_TRUE,
+                    default=False,
+                ),
+                Argument(
+                    name="add-new-variables",
+                    help="(Test Generation) If new variables are found in D/ when running tests, add them to the golden files.",
+                    action=ArgAction.STORE_TRUE,
+                    default=False,
+                    dest="add_new_variables",
+                ),
+                Argument(
+                    name="remove-old-tests",
+                    help="(Test Generation) Delete test directories that are no longer needed.",
+                    action=ArgAction.STORE_TRUE,
+                    default=False,
+                    dest="remove_old_tests",
+                ),
+            ]
+        ),
     ],
     examples=[
         Example("./mfc.sh test", "Run all tests"),
         Example("./mfc.sh test -j 4", "Run with 4 parallel jobs"),
         Example("./mfc.sh test --only 3D", "Run only 3D tests"),
         Example("./mfc.sh test --generate", "Regenerate golden files"),
+        Example(
+            "./mfc.sh test --only-changes -j 4", "Run tests affected by changed files"
+        ),
+        Example(
+            "./mfc.sh build --gcov -j 8 && ./mfc.sh test --build-coverage-cache",
+            "One-time: build file-coverage cache",
+        ),
     ],
     key_options=[
         ("-j, --jobs N", "Number of parallel test jobs"),
@@ -495,6 +551,8 @@ TEST_COMMAND = Command(
         ("-f, --from UUID", "Start from specific test"),
         ("--generate", "Generate/update golden files"),
         ("--no-build", "Skip rebuilding MFC"),
+        ("--build-coverage-cache", "Build file-level gcov coverage cache (one-time)"),
+        ("--only-changes", "Run tests affected by changed files (requires cache)"),
     ],
 )
 
@@ -566,7 +624,9 @@ NEW_COMMAND = Command(
     examples=[
         Example("./mfc.sh new my_case", "Create with 1D_minimal template"),
         Example("./mfc.sh new my_case -t 2D_minimal", "Create with 2D template"),
-        Example("./mfc.sh new my_case -t example:3D_sphbubcollapse", "Copy from example"),
+        Example(
+            "./mfc.sh new my_case -t example:3D_sphbubcollapse", "Copy from example"
+        ),
         Example("./mfc.sh new --list", "List available templates"),
     ],
     key_options=[
@@ -671,7 +731,9 @@ COMPLETION_COMMAND = Command(
         ),
     ],
     examples=[
-        Example("./mfc.sh completion install", "Install tab completion for current shell"),
+        Example(
+            "./mfc.sh completion install", "Install tab completion for current shell"
+        ),
         Example("./mfc.sh completion install bash", "Install for bash specifically"),
         Example("./mfc.sh completion status", "Check completion installation status"),
     ],
@@ -718,20 +780,20 @@ LOAD_COMMAND = Command(
 LINT_COMMAND = Command(
     name="lint",
     help="Lints and tests all toolchain code.",
-    description="Run pylint and unit tests on MFC's toolchain Python code.",
+    description="Run ruff and unit tests on MFC's toolchain Python code.",
     arguments=[
         Argument(
             name="no-test",
-            help="Skip running unit tests (only run pylint).",
+            help="Skip running unit tests (only run ruff).",
             action=ArgAction.STORE_TRUE,
         ),
     ],
     examples=[
-        Example("./mfc.sh lint", "Run pylint and unit tests"),
-        Example("./mfc.sh lint --no-test", "Run only pylint (skip unit tests)"),
+        Example("./mfc.sh lint", "Run ruff and unit tests"),
+        Example("./mfc.sh lint --no-test", "Run only ruff (skip unit tests)"),
     ],
     key_options=[
-        ("--no-test", "Skip unit tests, only run pylint"),
+        ("--no-test", "Skip unit tests, only run ruff"),
     ],
 )
 
@@ -806,7 +868,9 @@ GENERATE_COMMAND = Command(
     examples=[
         Example("./mfc.sh generate", "Regenerate completion scripts"),
         Example("./mfc.sh generate --check", "Check if completions are up to date"),
-        Example("./mfc.sh generate --json-schema", "Generate JSON Schema for IDE support"),
+        Example(
+            "./mfc.sh generate --json-schema", "Generate JSON Schema for IDE support"
+        ),
     ],
 )
 
@@ -918,7 +982,7 @@ VIZ_COMMAND = Command(
                 "Use --list-steps to see available timesteps."
             ),
             type=str,
-            default='last',
+            default="last",
             metavar="STEP",
         ),
         Argument(
@@ -928,7 +992,9 @@ VIZ_COMMAND = Command(
             type=str,
             default=None,
             choices=["binary", "silo"],
-            completion=Completion(type=CompletionType.CHOICES, choices=["binary", "silo"]),
+            completion=Completion(
+                type=CompletionType.CHOICES, choices=["binary", "silo"]
+            ),
         ),
         Argument(
             name="output",
@@ -943,33 +1009,102 @@ VIZ_COMMAND = Command(
             name="cmap",
             help="Matplotlib colormap name (--png, --mp4 only).",
             type=str,
-            default='viridis',
+            default="viridis",
             metavar="CMAP",
-            completion=Completion(type=CompletionType.CHOICES, choices=[
-                # Perceptually uniform sequential
-                "viridis", "plasma", "inferno", "magma", "cividis",
-                # Diverging
-                "RdBu", "RdYlBu", "RdYlGn", "RdGy", "coolwarm", "bwr", "seismic",
-                "PiYG", "PRGn", "BrBG", "PuOr", "Spectral",
-                # Sequential
-                "Blues", "Greens", "Oranges", "Reds", "Purples", "Greys",
-                "YlOrRd", "YlOrBr", "YlGn", "YlGnBu", "GnBu", "BuGn",
-                "BuPu", "PuBu", "PuBuGn", "PuRd", "RdPu",
-                # Sequential 2
-                "hot", "afmhot", "gist_heat", "copper",
-                "bone", "gray", "pink", "spring", "summer", "autumn", "winter", "cool",
-                "binary", "gist_yarg", "gist_gray",
-                # Cyclic
-                "twilight", "twilight_shifted", "hsv",
-                # Qualitative
-                "tab10", "tab20", "tab20b", "tab20c",
-                "Set1", "Set2", "Set3", "Paired", "Accent", "Dark2", "Pastel1", "Pastel2",
-                # Miscellaneous
-                "turbo", "jet", "rainbow", "nipy_spectral", "gist_ncar",
-                "gist_rainbow", "gist_stern", "gist_earth", "ocean", "terrain",
-                "gnuplot", "gnuplot2", "CMRmap", "cubehelix", "brg", "flag", "prism",
-                "Wistia",
-            ]),
+            completion=Completion(
+                type=CompletionType.CHOICES,
+                choices=[
+                    # Perceptually uniform sequential
+                    "viridis",
+                    "plasma",
+                    "inferno",
+                    "magma",
+                    "cividis",
+                    # Diverging
+                    "RdBu",
+                    "RdYlBu",
+                    "RdYlGn",
+                    "RdGy",
+                    "coolwarm",
+                    "bwr",
+                    "seismic",
+                    "PiYG",
+                    "PRGn",
+                    "BrBG",
+                    "PuOr",
+                    "Spectral",
+                    # Sequential
+                    "Blues",
+                    "Greens",
+                    "Oranges",
+                    "Reds",
+                    "Purples",
+                    "Greys",
+                    "YlOrRd",
+                    "YlOrBr",
+                    "YlGn",
+                    "YlGnBu",
+                    "GnBu",
+                    "BuGn",
+                    "BuPu",
+                    "PuBu",
+                    "PuBuGn",
+                    "PuRd",
+                    "RdPu",
+                    # Sequential 2
+                    "hot",
+                    "afmhot",
+                    "gist_heat",
+                    "copper",
+                    "bone",
+                    "gray",
+                    "pink",
+                    "spring",
+                    "summer",
+                    "autumn",
+                    "winter",
+                    "cool",
+                    "binary",
+                    "gist_yarg",
+                    "gist_gray",
+                    # Cyclic
+                    "twilight",
+                    "twilight_shifted",
+                    "hsv",
+                    # Qualitative
+                    "tab10",
+                    "tab20",
+                    "tab20b",
+                    "tab20c",
+                    "Set1",
+                    "Set2",
+                    "Set3",
+                    "Paired",
+                    "Accent",
+                    "Dark2",
+                    "Pastel1",
+                    "Pastel2",
+                    # Miscellaneous
+                    "turbo",
+                    "jet",
+                    "rainbow",
+                    "nipy_spectral",
+                    "gist_ncar",
+                    "gist_rainbow",
+                    "gist_stern",
+                    "gist_earth",
+                    "ocean",
+                    "terrain",
+                    "gnuplot",
+                    "gnuplot2",
+                    "CMRmap",
+                    "cubehelix",
+                    "brg",
+                    "flag",
+                    "prism",
+                    "Wistia",
+                ],
+            ),
         ),
         Argument(
             name="vmin",
@@ -996,7 +1131,7 @@ VIZ_COMMAND = Command(
             name="slice-axis",
             help="Axis for 3D slice (--png, --mp4 only).",
             type=str,
-            default='z',
+            default="z",
             choices=["x", "y", "z"],
             dest="slice_axis",
             completion=Completion(type=CompletionType.CHOICES, choices=["x", "y", "z"]),
@@ -1055,9 +1190,7 @@ VIZ_COMMAND = Command(
             name="interactive",
             short="i",
             help=(
-                "Launch an interactive Dash web UI in your browser. "
-                "Loads all timesteps (or the set given by --step) and lets you "
-                "scrub through them and switch variables live."
+                "Launch an interactive Dash web UI in your browser. Loads all timesteps (or the set given by --step) and lets you scrub through them and switch variables live."
             ),
             action=ArgAction.STORE_TRUE,
             default=False,
@@ -1078,8 +1211,7 @@ VIZ_COMMAND = Command(
         Argument(
             name="png",
             help=(
-                "Save PNG image(s) to the output directory instead of "
-                "launching the terminal UI."
+                "Save PNG image(s) to the output directory instead of launching the terminal UI."
             ),
             action=ArgAction.STORE_TRUE,
             default=False,
@@ -1088,12 +1220,30 @@ VIZ_COMMAND = Command(
     examples=[
         Example("./mfc.sh viz case_dir/", "Launch terminal UI (default mode)"),
         Example("./mfc.sh viz case_dir/ --list-steps", "Discover available timesteps"),
-        Example("./mfc.sh viz case_dir/ --list-vars --step 0", "Discover available variables at step 0"),
-        Example("./mfc.sh viz case_dir/ --var pres --interactive", "Browser UI — scrub timesteps and switch vars"),
-        Example("./mfc.sh viz case_dir/ --var pres --step 1000 --png", "Save pressure PNG at step 1000"),
-        Example("./mfc.sh viz case_dir/ --var pres --step 0:10000:500 --mp4", "Encode pressure MP4 from range"),
-        Example("./mfc.sh viz case_dir/ --step 0,100,200,...,1000 --png", "Render all steps 0–1000 as images"),
-        Example("./mfc.sh viz case_dir/ --var pres --step 500 --slice-axis x --png", "3D: x-plane slice of pressure"),
+        Example(
+            "./mfc.sh viz case_dir/ --list-vars --step 0",
+            "Discover available variables at step 0",
+        ),
+        Example(
+            "./mfc.sh viz case_dir/ --var pres --interactive",
+            "Browser UI — scrub timesteps and switch vars",
+        ),
+        Example(
+            "./mfc.sh viz case_dir/ --var pres --step 1000 --png",
+            "Save pressure PNG at step 1000",
+        ),
+        Example(
+            "./mfc.sh viz case_dir/ --var pres --step 0:10000:500 --mp4",
+            "Encode pressure MP4 from range",
+        ),
+        Example(
+            "./mfc.sh viz case_dir/ --step 0,100,200,...,1000 --png",
+            "Render all steps 0–1000 as images",
+        ),
+        Example(
+            "./mfc.sh viz case_dir/ --var pres --step 500 --slice-axis x --png",
+            "3D: x-plane slice of pressure",
+        ),
     ],
     key_options=[
         ("-- Discovery (all modes) --", ""),
@@ -1215,9 +1365,7 @@ PARAMS_COMMAND = Command(
 )
 
 
-# =============================================================================
 # HELP TOPICS
-# =============================================================================
 
 HELP_TOPICS = {
     "gpu": {
@@ -1239,9 +1387,7 @@ HELP_TOPICS = {
 }
 
 
-# =============================================================================
 # COMPLETE CLI SCHEMA
-# =============================================================================
 
 MFC_CLI_SCHEMA = CLISchema(
     prog="./mfc.sh",
@@ -1250,7 +1396,6 @@ Welcome to the MFC master script. This tool automates and manages building, test
 running, and cleaning of MFC in various configurations on all supported platforms. \
 The README documents this tool and its various commands in more detail. To get \
 started, run `./mfc.sh build -h`.""",
-
     arguments=[
         Argument(
             name="help",
@@ -1259,7 +1404,6 @@ started, run `./mfc.sh build -h`.""",
             action=ArgAction.STORE_TRUE,
         ),
     ],
-
     commands=[
         BUILD_COMMAND,
         RUN_COMMAND,
@@ -1284,7 +1428,6 @@ started, run `./mfc.sh build -h`.""",
         COUNT_COMMAND,
         COUNT_DIFF_COMMAND,
     ],
-
     common_sets=[
         COMMON_TARGETS,
         COMMON_JOBS,
@@ -1293,20 +1436,18 @@ started, run `./mfc.sh build -h`.""",
         COMMON_GPUS,
         COMMON_MFC_CONFIG,
     ],
-
     help_topics=HELP_TOPICS,
 )
 
 
-# =============================================================================
 # DERIVED DATA (for use by other modules)
-# =============================================================================
 
 # Command aliases mapping (replaces COMMAND_ALIASES in user_guide.py)
 COMMAND_ALIASES = {}
 for cmd in MFC_CLI_SCHEMA.commands:
     for alias in cmd.aliases:
         COMMAND_ALIASES[alias] = cmd.name
+
 
 # Commands dict (replaces COMMANDS in user_guide.py)
 def get_commands_dict():
@@ -1320,5 +1461,6 @@ def get_commands_dict():
         }
         for cmd in MFC_CLI_SCHEMA.commands
     }
+
 
 COMMANDS = get_commands_dict()

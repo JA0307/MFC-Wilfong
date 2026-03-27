@@ -20,8 +20,8 @@ _toolchain_dir = str(HERE.parent)
 if _toolchain_dir not in sys.path:
     sys.path.insert(0, _toolchain_dir)
 
-from mfc.case_validator import PHYSICS_DOCS  # noqa: E402  pylint: disable=wrong-import-position
-from mfc.params.ast_analyzer import (  # noqa: E402  pylint: disable=wrong-import-position
+from mfc.case_validator import PHYSICS_DOCS  # noqa: E402
+from mfc.params.ast_analyzer import (  # noqa: E402
     Rule,
     analyze_case_validator,
 )
@@ -142,7 +142,9 @@ def _render_method(doc: dict, method_rules: List[Rule], lines: List[str]) -> Non
 
     if method_rules:
         stages = _collect_stages(method_rules)
-        lines.append(f"**Stage:** {_stages_str(stages)} | **Severity:** {_severity_badge(method_rules)}\n")
+        lines.append(
+            f"**Stage:** {_stages_str(stages)} | **Severity:** {_severity_badge(method_rules)}\n"
+        )
 
         seen: Set[str] = set()
         msgs = []
@@ -153,7 +155,9 @@ def _render_method(doc: dict, method_rules: List[Rule], lines: List[str]) -> Non
         if msgs:
             lines.append("**Enforced checks:**\n")
             for m in msgs:
-                lines.append(f"{_SEVERITY_ICON.get(m.severity, '- ')}{_format_message(m.message)}")
+                lines.append(
+                    f"{_SEVERITY_ICON.get(m.severity, '- ')}{_format_message(m.message)}"
+                )
             lines.append("")
 
     if "exceptions" in doc:
@@ -165,7 +169,6 @@ def _render_method(doc: dict, method_rules: List[Rule], lines: List[str]) -> Non
     if "references" in doc:
         cites = ", ".join(f"\\cite {r}" for r in doc["references"])
         lines.append(f"**References:** {cites}\n")
-
 
     # Undocumented checks are omitted — they are discoverable via
     # @ref case_constraints "Case Creator Guide".
@@ -185,18 +188,16 @@ def render(rules: List[Rule]) -> str:
     lines.append("@page physics_constraints Physics Constraints\n")
     lines.append("# Physics Constraints Reference\n")
     lines.append(
-        "> Auto-generated from `PHYSICS_DOCS` in `case_validator.py` and "
-        "AST-extracted validation rules. Do not edit by hand.\n"
+        "> Auto-generated from `PHYSICS_DOCS` in `case_validator.py` and AST-extracted validation rules. Do not edit by hand.\n"
     )
     lines.append(
-        "This document catalogs the physics constraints enforced by MFC's case parameter validator. "
-        "Constraints are organized by physical category with mathematical justifications.\n"
+        "This document catalogs the physics constraints enforced by MFC's case parameter validator. Constraints are organized by physical category with mathematical justifications.\n"
     )
     lines.append(
-        "For parameter syntax and allowed values, see @ref case \"Case Files\" and "
-        "the @ref parameters \"Case Parameters\" reference. "
+        'For parameter syntax and allowed values, see @ref case "Case Files" and '
+        'the @ref parameters "Case Parameters" reference. '
         "For feature compatibility and working examples, see "
-        "@ref case_constraints \"Case Creator Guide\".\n"
+        '@ref case_constraints "Case Creator Guide".\n'
     )
 
     extra_categories = [c for c in by_category if c not in CATEGORY_ORDER]

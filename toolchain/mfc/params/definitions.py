@@ -1183,7 +1183,7 @@ def _load():  # pylint: disable=too-many-locals,too-many-statements
         _r(f"lag_params%{a}", INT, {"bubbles"})
     for a in ["epsilonb", "valmaxvoid", "charwidth", "c0", "rho0", "T0", "x0", "Thost"]:
         _r(f"lag_params%{a}", REAL, {"bubbles"})
-    _r(f"lag_params%input_path", STR, {"bubbles"})
+    _r("lag_params%input_path", STR, {"bubbles"})
 
     # --- lag_params (Lagrangian particles) ---
     for a in ["nParticles_glb", "stokes_drag", "qs_drag_model", "added_mass_model",

@@ -1,5 +1,4 @@
 #!/usr/bin/python
-import math
 import json
 
 # Numerical setup

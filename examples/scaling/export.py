@@ -1,7 +1,7 @@
-import re
-import os
 import csv
 import glob
+import os
+import re
 import statistics
 from dataclasses import dataclass, fields
 
@@ -54,7 +54,11 @@ for logpath in glob.glob(os.path.join(LDIR, "run-*-sim*")):
 
     pathels = os.path.relpath(logpath, LDIR).split("-")
 
-    runs[Configuration(nodes=int(pathels[1]), mem=int(pathels[2]), rdma_mpi=pathels[3] == "T")] = Result(
+    runs[
+        Configuration(
+            nodes=int(pathels[1]), mem=int(pathels[2]), rdma_mpi=pathels[3] == "T"
+        )
+    ] = Result(
         ts_avg=statistics.mean(tss),
         mpi_avg=statistics.mean(mpis),
         init_t=get_num(re.findall(r"Init took .+", logdata, re.MULTILINE)[0]),
@@ -66,21 +70,32 @@ with open(os.path.join(CDIR, "export.csv"), "w") as f:
     writer.writerow([_.name for _ in fields(Configuration) + fields(Result)])
 
     for cfg in sorted(runs.keys()):
-        writer.writerow([getattr(cfg, _.name) for _ in fields(Configuration)] + [getattr(runs[cfg], _.name) for _ in fields(Result)])
+        writer.writerow(
+            [getattr(cfg, _.name) for _ in fields(Configuration)]
+            + [getattr(runs[cfg], _.name) for _ in fields(Result)]
+        )
 
 for rdma_mpi in (False, True):
-    with open(os.path.join(CDIR, f"strong_scaling{'-rdma_mpi' if rdma_mpi else ''}.csv"), "w") as f:
+    with open(
+        os.path.join(CDIR, f"strong_scaling{'-rdma_mpi' if rdma_mpi else ''}.csv"), "w"
+    ) as f:
         writer = csv.writer(f, delimiter=",")
 
         for nodes in sorted({_.nodes for _ in runs.keys() if _.rdma_mpi == rdma_mpi}):
             row = (nodes * 8,)
             for mem in sorted(
-                {_.mem for _ in runs.keys() if _.nodes == nodes and _.rdma_mpi == rdma_mpi},
+                {
+                    _.mem
+                    for _ in runs.keys()
+                    if _.nodes == nodes and _.rdma_mpi == rdma_mpi
+                },
                 reverse=True,
             ):
                 ref = runs[
                     Configuration(
-                        nodes=sorted({_.nodes for _ in runs.keys() if _.rdma_mpi == rdma_mpi})[0],
+                        nodes=sorted(
+                            {_.nodes for _ in runs.keys() if _.rdma_mpi == rdma_mpi}
+                        )[0],
                         mem=mem,
                         rdma_mpi=rdma_mpi,
                     )

@@ -4,7 +4,6 @@
 # and r is the radius of the droplet. The results of this simulation agree with theory to well within 1%
 # relative error.
 
-import math
 import json
 
 l = 0.375

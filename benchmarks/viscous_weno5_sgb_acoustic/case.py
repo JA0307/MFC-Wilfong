@@ -8,15 +8,33 @@
 # - bubble_model : 3
 # - acoustic_source : T
 
+import argparse
 import json
 import math
-import argparse
 
-parser = argparse.ArgumentParser(prog="Benchmarking Case 2", description="This MFC case was created for the purposes of benchmarking MFC.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(
+    prog="Benchmarking Case 2",
+    description="This MFC case was created for the purposes of benchmarking MFC.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
 
-parser.add_argument("--mfc", type=json.loads, default="{}", metavar="DICT", help="MFC's toolchain's internal state.")
-parser.add_argument("--gbpp", type=int, metavar="MEM", default=16, help="Adjusts the problem size per rank to fit into [MEM] GB of GPU memory per GPU.")
-parser.add_argument("--steps", type=int, default=None, help="Override t_step_stop/t_step_save.")
+parser.add_argument(
+    "--mfc",
+    type=json.loads,
+    default="{}",
+    metavar="DICT",
+    help="MFC's toolchain's internal state.",
+)
+parser.add_argument(
+    "--gbpp",
+    type=int,
+    metavar="MEM",
+    default=16,
+    help="Adjusts the problem size per rank to fit into [MEM] GB of GPU memory per GPU.",
+)
+parser.add_argument(
+    "--steps", type=int, default=None, help="Override t_step_stop/t_step_save."
+)
 
 ARGS = vars(parser.parse_args())
 DICT = ARGS["mfc"]
@@ -94,8 +112,12 @@ print(
             "p": Nz,
             "dt": dt,
             "t_step_start": 0,
-            "t_step_stop": ARGS["steps"] if ARGS["steps"] is not None else int(2 * (5 * size + 5)),
-            "t_step_save": ARGS["steps"] if ARGS["steps"] is not None else int(2 * (5 * size + 5)),
+            "t_step_stop": ARGS["steps"]
+            if ARGS["steps"] is not None
+            else int(2 * (5 * size + 5)),
+            "t_step_save": ARGS["steps"]
+            if ARGS["steps"] is not None
+            else int(2 * (5 * size + 5)),
             # Simulation Algorithm Parameters
             "num_patches": 2,
             "model_eqns": 2,

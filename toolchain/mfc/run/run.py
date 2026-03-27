@@ -1,18 +1,30 @@
-import re, os, sys, typing, dataclasses, shlex
-
+import dataclasses
+import os
+import re
+import shlex
+import sys
+import typing
 from glob import glob
 
-from mako.lookup   import TemplateLookup
+from mako.lookup import TemplateLookup
 from mako.template import Template
 
-from ..build   import get_targets, build, REQUIRED_TARGETS, SIMULATION
+from ..build import REQUIRED_TARGETS, SIMULATION, build, get_targets
+from ..common import (
+    MFC_ROOT_DIR,
+    MFC_TEMPLATE_DIR,
+    MFCException,
+    does_command_exist,
+    file_dump_yaml,
+    file_read,
+    file_write,
+    format_list_to_string,
+    isspace,
+    system,
+)
 from ..printer import cons
-from ..state   import ARG, ARGS, CFG, gpuConfigOptions
-from ..common  import MFCException, isspace, file_read, does_command_exist
-from ..common  import MFC_TEMPLATE_DIR, file_write, system, MFC_ROOT_DIR
-from ..common  import format_list_to_string, file_dump_yaml
-
-from . import queues, input
+from ..state import ARG, ARGS, CFG, gpuConfigOptions
+from . import input, queues
 
 
 def __validate_job_options() -> None:
@@ -28,32 +40,56 @@ def __validate_job_options() -> None:
     if not isspace(ARG("email")):
         # https://stackoverflow.com/questions/8022530/how-to-check-for-valid-email-address
         if not re.match(r"\"?([-a-zA-Z0-9.`?{}]+@\w+\.\w+)\"?", ARG("email")):
-            raise MFCException(f'RUN: {ARG("email")} is not a valid e-mail address.')
+            raise MFCException(f"RUN: {ARG('email')} is not a valid e-mail address.")
 
 
 def __profiler_prepend() -> typing.List[str]:
     if ARG("ncu") is not None:
         if not does_command_exist("ncu"):
-            raise MFCException("Failed to locate [bold green]NVIDIA Nsight Compute[/bold green] (ncu).")
+            raise MFCException(
+                "Failed to locate [bold green]NVIDIA Nsight Compute[/bold green] (ncu)."
+            )
 
-        return ["ncu", "--nvtx", "--mode=launch-and-attach",
-                       "--cache-control=none", "--clock-control=none"] + ARG("ncu")
+        return [
+            "ncu",
+            "--nvtx",
+            "--mode=launch-and-attach",
+            "--cache-control=none",
+            "--clock-control=none",
+        ] + ARG("ncu")
 
     if ARG("nsys") is not None:
         if not does_command_exist("nsys"):
-            raise MFCException("Failed to locate [bold green]NVIDIA Nsight Systems[/bold green] (nsys).")
+            raise MFCException(
+                "Failed to locate [bold green]NVIDIA Nsight Systems[/bold green] (nsys)."
+            )
 
-        return ["nsys", "profile", "--stats=true", "--trace=mpi,nvtx,openacc"] + ARG("nsys")
+        return ["nsys", "profile", "--stats=true", "--trace=mpi,nvtx,openacc"] + ARG(
+            "nsys"
+        )
 
     if ARG("rcu") is not None:
         if not does_command_exist("rocprof-compute"):
-            raise MFCException("Failed to locate [bold red]ROCM rocprof-compute[/bold red] (rocprof-compute).")
+            raise MFCException(
+                "Failed to locate [bold red]ROCM rocprof-compute[/bold red] (rocprof-compute)."
+            )
 
-        return ["rocprof-compute", "profile", "-n", ARG("name").replace('-', '_').replace('.', '_')] + ARG("rcu") + ["--"]
+        return (
+            [
+                "rocprof-compute",
+                "profile",
+                "-n",
+                ARG("name").replace("-", "_").replace(".", "_"),
+            ]
+            + ARG("rcu")
+            + ["--"]
+        )
 
     if ARG("rsys") is not None:
         if not does_command_exist("rocprof"):
-            raise MFCException("Failed to locate [bold red]ROCM rocprof-systems[/bold red] (rocprof-systems).")
+            raise MFCException(
+                "Failed to locate [bold red]ROCM rocprof-systems[/bold red] (rocprof-systems)."
+            )
 
         return ["rocprof"] + ARG("rsys")
 
@@ -62,22 +98,28 @@ def __profiler_prepend() -> typing.List[str]:
 
 def get_baked_templates() -> dict:
     return {
-        os.path.splitext(os.path.basename(f))[0] : file_read(f)
+        os.path.splitext(os.path.basename(f))[0]: file_read(f)
         for f in glob(os.path.join(MFC_TEMPLATE_DIR, "*.mako"))
     }
 
 
 def __job_script_filepath() -> str:
-    return os.path.abspath(os.sep.join([
-        os.path.dirname(ARG("input")),
-        f"{ARG('name')}.{'bat' if os.name == 'nt' else 'sh'}"
-    ]))
+    return os.path.abspath(
+        os.sep.join(
+            [
+                os.path.dirname(ARG("input")),
+                f"{ARG('name')}.{'bat' if os.name == 'nt' else 'sh'}",
+            ]
+        )
+    )
 
 
 def __get_template() -> Template:
     computer = ARG("computer")
-    lookup   = TemplateLookup(directories=[MFC_TEMPLATE_DIR, os.path.join(MFC_TEMPLATE_DIR, "include")])
-    baked    = get_baked_templates()
+    lookup = TemplateLookup(
+        directories=[MFC_TEMPLATE_DIR, os.path.join(MFC_TEMPLATE_DIR, "include")]
+    )
+    baked = get_baked_templates()
 
     if (content := baked.get(computer)) is not None:
         cons.print(f"Using baked-in template for [magenta]{computer}[/magenta].")
@@ -87,20 +129,19 @@ def __get_template() -> Template:
         cons.print(f"Using template from [magenta]{computer}[/magenta].")
         return Template(file_read(computer), lookup=lookup)
 
-    raise MFCException(f"Failed to find a template for --computer '{computer}'. Baked-in templates are: {format_list_to_string(list(baked.keys()), 'magenta')}.")
+    raise MFCException(
+        f"Failed to find a template for --computer '{computer}'. Baked-in templates are: {format_list_to_string(list(baked.keys()), 'magenta')}."
+    )
 
 
 def __generate_job_script(targets, case: input.MFCInputFile):
     env = {}
-    if ARG('gpus') is not None:
-        gpu_ids = ','.join([str(_) for _ in ARG('gpus')])
-        env.update({
-            'CUDA_VISIBLE_DEVICES': gpu_ids,
-            'HIP_VISIBLE_DEVICES':  gpu_ids
-        })
+    if ARG("gpus") is not None:
+        gpu_ids = ",".join([str(_) for _ in ARG("gpus")])
+        env.update({"CUDA_VISIBLE_DEVICES": gpu_ids, "HIP_VISIBLE_DEVICES": gpu_ids})
 
     # Compute GPU mode booleans for templates
-    gpu_mode = ARG('gpu')
+    gpu_mode = ARG("gpu")
 
     # Validate gpu_mode is one of the expected values
     valid_gpu_modes = {e.value for e in gpuConfigOptions}
@@ -114,7 +155,7 @@ def __generate_job_script(targets, case: input.MFCInputFile):
     gpu_mp = gpu_mode == gpuConfigOptions.MP.value
 
     content = __get_template().render(
-        **{**ARGS(), 'targets': targets},
+        **{**ARGS(), "targets": targets},
         ARG=ARG,
         env=env,
         case=case,
@@ -124,7 +165,7 @@ def __generate_job_script(targets, case: input.MFCInputFile):
         profiler=shlex.join(__profiler_prepend()),
         gpu_enabled=gpu_enabled,
         gpu_acc=gpu_acc,
-        gpu_mp=gpu_mp
+        gpu_mp=gpu_mp,
     )
 
     file_write(__job_script_filepath(), content)
@@ -144,7 +185,7 @@ def __execute_job_script(qsystem: queues.QueueSystem):
     # in the correct directory.
     cmd = qsystem.gen_submit_cmd(__job_script_filepath())
 
-    verbosity = ARG('verbose')
+    verbosity = ARG("verbose")
 
     # At verbosity >= 1, show the command being executed
     if verbosity >= 1:
@@ -155,17 +196,22 @@ def __execute_job_script(qsystem: queues.QueueSystem):
     # At verbosity >= 2, show print_cmd=True for system() calls
     print_cmd = verbosity >= 2
 
-    if system(cmd, cwd=os.path.dirname(ARG("input")), print_cmd=print_cmd).returncode != 0:
-        raise MFCException(f"Submitting batch file for {qsystem.name} failed. It can be found here: {__job_script_filepath()}. Please check the file for errors.")
+    if (
+        system(cmd, cwd=os.path.dirname(ARG("input")), print_cmd=print_cmd).returncode
+        != 0
+    ):
+        raise MFCException(
+            f"Submitting batch file for {qsystem.name} failed. It can be found here: {__job_script_filepath()}. Please check the file for errors."
+        )
 
 
-def run(targets = None, case = None):
+def run(targets=None, case=None):
     targets = get_targets(list(REQUIRED_TARGETS) + (targets or ARG("targets")))
-    case    = case or input.load(ARG("input"), ARG("--"))
+    case = case or input.load(ARG("input"), ARG("--"))
 
     build(targets)
 
-    verbosity = ARG('verbose')
+    verbosity = ARG("verbose")
 
     cons.print("[bold]Run[/bold]")
     cons.indent()
@@ -184,7 +230,9 @@ def run(targets = None, case = None):
         cons.print(f"  [dim]Targets: {', '.join(t.name for t in targets)}[/dim]")
         cons.print(f"  [dim]Input file: {ARG('input')}[/dim]")
         if ARG("nodes") > 1 or ARG("tasks_per_node") > 1:
-            cons.print(f"  [dim]MPI: {ARG('nodes')} nodes × {ARG('tasks_per_node')} tasks/node = {ARG('nodes') * ARG('tasks_per_node')} total ranks[/dim]")
+            cons.print(
+                f"  [dim]MPI: {ARG('nodes')} nodes × {ARG('tasks_per_node')} tasks/node = {ARG('nodes') * ARG('tasks_per_node')} total ranks[/dim]"
+            )
 
     __generate_job_script(targets, case)
     __validate_job_options()
@@ -195,10 +243,10 @@ def run(targets = None, case = None):
 
     if not ARG("dry_run"):
         if ARG("output_summary") is not None:
-            file_dump_yaml(ARG("output_summary"), {
-                "invocation": sys.argv[1:],
-                "lock":       dataclasses.asdict(CFG())
-            })
+            file_dump_yaml(
+                ARG("output_summary"),
+                {"invocation": sys.argv[1:], "lock": dataclasses.asdict(CFG())},
+            )
 
         if verbosity >= 1:
             cons.print()

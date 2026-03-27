@@ -1,27 +1,32 @@
-import os, json, glob, typing, dataclasses
+import dataclasses
+import glob
+import json
+import os
+import typing
+
+from .. import case_validator, common
+from ..case import Case
 
 # Note: pyrometheus and cantera are imported lazily in the methods that need them
 # to avoid slow startup times for commands that don't use chemistry features
 # Note: build is imported lazily to avoid circular import with build.py
-
 from ..printer import cons
-from ..        import common
-from ..state   import ARGS, ARG, gpuConfigOptions
-from ..case    import Case
-from ..        import case_validator
+from ..state import ARG, ARGS, gpuConfigOptions
+
 
 @dataclasses.dataclass(init=False)
 class MFCInputFile(Case):
     filename: str
-    dirpath:  str
+    dirpath: str
 
     def __init__(self, filename: str, dirpath: str, params: dict) -> None:
         super().__init__(params)
         self.filename = filename
-        self.dirpath  = dirpath
+        self.dirpath = dirpath
 
     def generate_inp(self, target) -> None:
-        from .. import build  # pylint: disable=import-outside-toplevel
+        from .. import build
+
         target = build.get_target(target)
 
         # Save .inp input file
@@ -38,9 +43,9 @@ class MFCInputFile(Case):
 
     def get_cantera_solution(self):
         # Lazy import to avoid slow startup for commands that don't need chemistry
-        import cantera as ct  # pylint: disable=import-outside-toplevel
+        import cantera as ct
 
-        if self.params.get("chemistry", 'F') == 'T':
+        if self.params.get("chemistry", "F") == "T":
             cantera_file = self.params["cantera_file"]
 
             candidates = [
@@ -60,32 +65,36 @@ class MFCInputFile(Case):
             except Exception:
                 continue
 
-        raise common.MFCException(f"Cantera file '{cantera_file}' not found. Searched: {', '.join(candidates)}.")
+        raise common.MFCException(
+            f"Cantera file '{cantera_file}' not found. Searched: {', '.join(candidates)}."
+        )
 
     def generate_fpp(self, target) -> None:
         # Lazy import to avoid slow startup for commands that don't need chemistry
-        import pyrometheus as pyro  # pylint: disable=import-outside-toplevel
+        import pyrometheus as pyro
 
         if target.isDependency:
             return
 
-        cons.print(f"Generating [magenta]case.fpp[/magenta].")
+        cons.print("Generating [magenta]case.fpp[/magenta].")
         cons.indent()
 
         # Case FPP file
         self.__save_fpp(target, self.get_fpp(target))
 
         # (Thermo)Chemistry source file
-        modules_dir = os.path.join(target.get_staging_dirpath(self), "modules", target.name)
+        modules_dir = os.path.join(
+            target.get_staging_dirpath(self), "modules", target.name
+        )
         common.create_directory(modules_dir)
 
         # Determine the real type based on the single precision flag
-        real_type = 'real(sp)' if (ARG('single') or ARG('mixed')) else 'real(dp)'
+        real_type = "real(sp)" if (ARG("single") or ARG("mixed")) else "real(dp)"
 
         if ARG("gpu") == gpuConfigOptions.MP.value:
-            directive_str = 'mp'
+            directive_str = "mp"
         elif ARG("gpu") == gpuConfigOptions.ACC.value:
-            directive_str = 'acc'
+            directive_str = "acc"
         else:
             directive_str = None
 
@@ -95,7 +104,9 @@ class MFCInputFile(Case):
         thermochem_code = pyro.FortranCodeGenerator().generate(
             "m_thermochem",
             sol,
-            pyro.CodeGenerationOptions(scalar_type = real_type, directive_offload = directive_str)
+            pyro.CodeGenerationOptions(
+                scalar_type=real_type, directive_offload=directive_str
+            ),
         )
 
         # CCE 19.0.0 workaround: pyrometheus generates !DIR$ INLINEALWAYS for Cray+ACC
@@ -103,11 +114,8 @@ class MFCInputFile(Case):
         # OpenACC device routines. Replace with plain !$acc routine seq (no INLINEALWAYS).
         # This patch can be removed once pyrometheus upstream correctly emits !$acc routine seq
         # for Cray+OpenACC (the broken macro originates in pyrometheus's code generator).
-        if directive_str == 'acc':
-            old_macro = (
-                "#ifdef _CRAYFTN\n#define GPU_ROUTINE(name) !DIR$ INLINEALWAYS name\n"
-                "#else\n#define GPU_ROUTINE(name) !$acc routine seq\n#endif"
-            )
+        if directive_str == "acc":
+            old_macro = "#ifdef _CRAYFTN\n#define GPU_ROUTINE(name) !DIR$ INLINEALWAYS name\n#else\n#define GPU_ROUTINE(name) !$acc routine seq\n#endif"
             new_macro = "#define GPU_ROUTINE(name) !$acc routine seq"
             patched = thermochem_code.replace(old_macro, new_macro)
             if patched == thermochem_code:
@@ -115,35 +123,35 @@ class MFCInputFile(Case):
                     pass  # pyrometheus already emits the correct form; no patch needed
                 else:
                     raise common.MFCException(
-                        "CCE 19.0.0 workaround: pyrometheus output format changed — "
-                        "Cray+ACC GPU_ROUTINE macro patch did not apply. "
-                        "Update the pattern in toolchain/mfc/run/input.py."
+                        "CCE 19.0.0 workaround: pyrometheus output format changed — Cray+ACC GPU_ROUTINE macro patch did not apply. Update the pattern in toolchain/mfc/run/input.py."
                     )
             else:
-                cons.print("[yellow]Warning: Applied CCE 19.0.0 workaround patch to pyrometheus-generated "
-                           "m_thermochem.f90 (replaced _CRAYFTN GPU_ROUTINE macro with !$acc routine seq). "
-                           "Remove this patch once pyrometheus emits correct Cray+ACC directives upstream.[/yellow]")
+                cons.print(
+                    "[yellow]Warning: Applied CCE 19.0.0 workaround patch to pyrometheus-generated "
+                    "m_thermochem.f90 (replaced _CRAYFTN GPU_ROUTINE macro with !$acc routine seq). "
+                    "Remove this patch once pyrometheus emits correct Cray+ACC directives upstream.[/yellow]"
+                )
             thermochem_code = patched
 
         common.file_write(
-            os.path.join(modules_dir, "m_thermochem.f90"),
-            thermochem_code,
-            True
+            os.path.join(modules_dir, "m_thermochem.f90"), thermochem_code, True
         )
 
         cons.unindent()
 
-
     def validate_constraints(self, target) -> None:
         """Validate case parameter constraints for a given target stage"""
-        from .. import build  # pylint: disable=import-outside-toplevel
+        from .. import build
+
         target_obj = build.get_target(target)
         stage = target_obj.name
 
         try:
             warnings = case_validator.validate_case_constraints(self.params, stage)
         except case_validator.CaseConstraintError as e:
-            raise common.MFCException(f"Case validation failed for {stage}:\n{e}") from e
+            raise common.MFCException(
+                f"Case validation failed for {stage}:\n{e}"
+            ) from e
 
         if warnings:
             cons.print()
@@ -161,25 +169,41 @@ class MFCInputFile(Case):
         self.generate_fpp(target)
 
     def clean(self, _targets) -> None:
-        from .. import build  # pylint: disable=import-outside-toplevel
+        from .. import build
+
         targets = [build.get_target(target) for target in _targets]
 
         files = set()
-        dirs  = set()
+        dirs = set()
 
-        files = set([
-            "equations.dat", "run_time.inf", "time_data.dat",
-            "io_time_data.dat", "fort.1", "pre_time_data.dat"
-        ] + [f"{target.name}.inp" for target in targets])
+        files = set(
+            [
+                "equations.dat",
+                "run_time.inf",
+                "time_data.dat",
+                "io_time_data.dat",
+                "fort.1",
+                "pre_time_data.dat",
+            ]
+            + [f"{target.name}.inp" for target in targets]
+        )
 
         if build.PRE_PROCESS in targets:
-            files = files | set(glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat")))
-            dirs  = dirs  | set(glob.glob(os.path.join(self.dirpath, "p_all", "p*", "0")))
+            files = files | set(
+                glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat"))
+            )
+            dirs = dirs | set(glob.glob(os.path.join(self.dirpath, "p_all", "p*", "0")))
 
         if build.SIMULATION in targets:
-            restarts = set(glob.glob(os.path.join(self.dirpath, "restart_data", "*.dat")))
-            restarts = restarts - set(glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_0.dat")))
-            restarts = restarts - set(glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_*_cb.dat")))
+            restarts = set(
+                glob.glob(os.path.join(self.dirpath, "restart_data", "*.dat"))
+            )
+            restarts = restarts - set(
+                glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_0.dat"))
+            )
+            restarts = restarts - set(
+                glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_*_cb.dat"))
+            )
 
             Ds = set(glob.glob(os.path.join(self.dirpath, "D", "*.dat")))
             Ds = Ds - set(glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat")))
@@ -191,18 +215,27 @@ class MFCInputFile(Case):
             dirs.add("silo_hdf5")
 
         for relfile in files:
-            if not os.path.isfile(relfile):
-                relfile = os.path.join(self.dirpath, relfile)
-            common.delete_file(relfile)
+            filepath = (
+                relfile
+                if os.path.isfile(relfile)
+                else os.path.join(self.dirpath, relfile)
+            )
+            common.delete_file(filepath)
 
         for reldir in dirs:
-            if not os.path.isdir(reldir):
-                reldir = os.path.join(self.dirpath, reldir)
-            common.delete_directory(reldir)
+            dirpath = (
+                reldir if os.path.isdir(reldir) else os.path.join(self.dirpath, reldir)
+            )
+            common.delete_directory(dirpath)
 
 
 # Load the input file
-def load(filepath: str = None, args: typing.List[str] = None, empty_data: dict = None, do_print: bool = True) -> MFCInputFile:
+def load(
+    filepath: str = None,
+    args: typing.List[str] = None,
+    empty_data: dict = None,
+    do_print: bool = True,
+) -> MFCInputFile:
     if not filepath:
         if empty_data is None:
             raise common.MFCException("Please provide an input file.")
@@ -216,31 +249,42 @@ def load(filepath: str = None, args: typing.List[str] = None, empty_data: dict =
     if do_print:
         cons.print(f"Acquiring [bold magenta]{filename}[/bold magenta]...")
 
-    dirpath:    str  = os.path.abspath(os.path.dirname(filename))
+    dirpath: str = os.path.abspath(os.path.dirname(filename))
     dictionary: dict = {}
 
     if not os.path.exists(filename):
-        raise common.MFCException(f"Input file '{filename}' does not exist. Please check the path is valid.")
+        raise common.MFCException(
+            f"Input file '{filename}' does not exist. Please check the path is valid."
+        )
 
     if filename.endswith(".py"):
-        (json_str, err) = common.get_py_program_output(filename, ["--mfc", json.dumps(ARGS())] + (args or []))
+        (json_str, err) = common.get_py_program_output(
+            filename, ["--mfc", json.dumps(ARGS())] + (args or [])
+        )
 
         if err != 0:
-            raise common.MFCException(f"Input file {filename} terminated with a non-zero exit code. Please make sure running the file doesn't produce any errors.")
+            raise common.MFCException(
+                f"Input file {filename} terminated with a non-zero exit code. Please make sure running the file doesn't produce any errors."
+            )
     elif filename.endswith(".json"):
         json_str = common.file_read(filename)
     elif filename.endswith((".yaml", ".yml")):
-        import yaml  # pylint: disable=import-outside-toplevel
-        with open(filename, 'r') as f:
+        import yaml
+
+        with open(filename, "r") as f:
             dictionary = yaml.safe_load(f)
         json_str = json.dumps(dictionary)
     else:
-        raise common.MFCException("Unrecognized input file format. Supported: .py, .json, .yaml, .yml. Please check the README and sample cases in the examples directory.")
+        raise common.MFCException(
+            "Unrecognized input file format. Supported: .py, .json, .yaml, .yml. Please check the README and sample cases in the examples directory."
+        )
 
     try:
         dictionary = json.loads(json_str)
     except Exception as exc:
-        raise common.MFCException(f"Input file {filename} did not produce valid JSON. It should only print the case dictionary.\n\n{exc}\n")
+        raise common.MFCException(
+            f"Input file {filename} did not produce valid JSON. It should only print the case dictionary.\n\n{exc}\n"
+        )
 
     input_file = MFCInputFile(filename, dirpath, dictionary)
     input_file.validate_params(f"Input file {filename}")

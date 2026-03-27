@@ -1,6 +1,9 @@
-import os, typing, dataclasses
+import dataclasses
+import os
+import typing
 
-from     mfc import common
+from mfc import common
+
 from ..state import ARG
 
 
@@ -26,7 +29,7 @@ class InteractiveSystem(QueueSystem):
         return True
 
     def gen_submit_cmd(self, filepath: str) -> typing.List[str]:
-        if os.name == 'nt':
+        if os.name == "nt":
             return [filepath]
 
         return ["/bin/bash", filepath]
@@ -51,7 +54,9 @@ class LSFSystem(QueueSystem):
         super().__init__("LSF")
 
     def is_active(self) -> bool:
-        return common.does_command_exist("bsub") and common.does_command_exist("bqueues")
+        return common.does_command_exist("bsub") and common.does_command_exist(
+            "bqueues"
+        )
 
     def gen_submit_cmd(self, filepath: str) -> None:
         cmd = ["bsub"]
@@ -78,7 +83,8 @@ class SLURMSystem(QueueSystem):
         return cmd + [filepath]
 
 
-BATCH_SYSTEMS = [ LSFSystem(), SLURMSystem(), PBSSystem() ]
+BATCH_SYSTEMS = [LSFSystem(), SLURMSystem(), PBSSystem()]
+
 
 def get_system() -> QueueSystem:
     if ARG("engine") == "interactive":
@@ -88,4 +94,6 @@ def get_system() -> QueueSystem:
         if system.is_active():
             return system
 
-    raise common.MFCException(f"Failed to detect a queue system for engine [magenta]{ARG('engine')}[/magenta].")
+    raise common.MFCException(
+        f"Failed to detect a queue system for engine [magenta]{ARG('engine')}[/magenta]."
+    )
