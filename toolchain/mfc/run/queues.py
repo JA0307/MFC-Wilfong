@@ -54,9 +54,7 @@ class LSFSystem(QueueSystem):
         super().__init__("LSF")
 
     def is_active(self) -> bool:
-        return common.does_command_exist("bsub") and common.does_command_exist(
-            "bqueues"
-        )
+        return common.does_command_exist("bsub") and common.does_command_exist("bqueues")
 
     def gen_submit_cmd(self, filepath: str) -> None:
         cmd = ["bsub"]
@@ -94,6 +92,4 @@ def get_system() -> QueueSystem:
         if system.is_active():
             return system
 
-    raise common.MFCException(
-        f"Failed to detect a queue system for engine [magenta]{ARG('engine')}[/magenta]."
-    )
+    raise common.MFCException(f"Failed to detect a queue system for engine [magenta]{ARG('engine')}[/magenta].")

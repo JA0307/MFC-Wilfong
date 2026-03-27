@@ -73,9 +73,7 @@ def _collect_all_options(cmd: Command, schema: CLISchema) -> List[str]:
     return sorted(options)
 
 
-def _bash_completion_for_type(
-    comp_type: CompletionType, choices: List[str] = None
-) -> str:
+def _bash_completion_for_type(comp_type: CompletionType, choices: List[str] = None) -> str:
     """Generate bash completion expression for a completion type."""
     if comp_type == CompletionType.CHOICES and choices:
         return f'COMPREPLY=( $(compgen -W "{" ".join(choices)}" -- "${{cur}}") )'
@@ -98,14 +96,7 @@ def _generate_bash_prev_cases(cmd: Command, schema: CLISchema) -> List[str]:
     """Generate bash prev-based completion cases for a command."""
     lines = []
     has_prev_cases = False
-    completable_types = (
-        CompletionType.CHOICES,
-        CompletionType.FILES_PY,
-        CompletionType.FILES_PACK,
-        CompletionType.FILES,
-        CompletionType.DIRECTORIES,
-        CompletionType.FILES_YAML,
-    )
+    completable_types = (CompletionType.CHOICES, CompletionType.FILES_PY, CompletionType.FILES_PACK, CompletionType.FILES, CompletionType.DIRECTORIES, CompletionType.FILES_YAML)
 
     all_args = _collect_all_args(cmd, schema)
 
@@ -120,9 +111,7 @@ def _generate_bash_prev_cases(cmd: Command, schema: CLISchema) -> List[str]:
 
     if multivalue_args:
         # Generate backward-scanning logic for multi-value args
-        lines.append(
-            "            # Check for multi-value arguments by scanning backwards"
-        )
+        lines.append("            # Check for multi-value arguments by scanning backwards")
         lines.append("            local i")
         lines.append("            for ((i=COMP_CWORD-1; i>=2; i--)); do")
         lines.append('                case "${COMP_WORDS[i]}" in')
@@ -132,9 +121,7 @@ def _generate_bash_prev_cases(cmd: Command, schema: CLISchema) -> List[str]:
             flags.append(f"--{arg.name}")
             lines.append(f"                    {'|'.join(flags)})")
             comp_choices = arg.completion.choices or arg.choices
-            completion_code = _bash_completion_for_type(
-                arg.completion.type, comp_choices
-            )
+            completion_code = _bash_completion_for_type(arg.completion.type, comp_choices)
             if completion_code:
                 lines.append(f"                        {completion_code}")
             lines.append("                        return 0")
@@ -191,9 +178,7 @@ def _generate_bash_command_case(cmd: Command, schema: CLISchema) -> List[str]:
     if cmd.subcommands:
         lines.append("            if [[ ${COMP_CWORD} -eq 2 ]]; then")
         subcmd_names = [sc.name for sc in cmd.subcommands]
-        lines.append(
-            f'                COMPREPLY=( $(compgen -W "{" ".join(subcmd_names)}" -- "${{cur}}") )'
-        )
+        lines.append(f'                COMPREPLY=( $(compgen -W "{" ".join(subcmd_names)}" -- "${{cur}}") )')
         lines.append("                return 0")
         lines.append("            fi")
         lines.append("            ;;")
@@ -206,20 +191,13 @@ def _generate_bash_command_case(cmd: Command, schema: CLISchema) -> List[str]:
     if options:
         lines.append(f'            local opts="{" ".join(options)}"')
         lines.append('            if [[ "${cur}" == -* ]]; then')
-        lines.append(
-            '                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )'
-        )
+        lines.append('                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )')
 
-        if (
-            cmd.positionals
-            and cmd.positionals[0].completion.type != CompletionType.NONE
-        ):
+        if cmd.positionals and cmd.positionals[0].completion.type != CompletionType.NONE:
             lines.append("            else")
             pos = cmd.positionals[0]
             comp_choices = pos.completion.choices or pos.choices
-            completion_code = _bash_completion_for_type(
-                pos.completion.type, comp_choices
-            )
+            completion_code = _bash_completion_for_type(pos.completion.type, comp_choices)
             if completion_code:
                 lines.append(f"                {completion_code}")
 
@@ -265,12 +243,7 @@ def generate_bash_completion(schema: CLISchema) -> str:
     ]
 
     for cmd in schema.commands:
-        if (
-            not cmd.arguments
-            and not cmd.positionals
-            and not cmd.include_common
-            and not cmd.subcommands
-        ):
+        if not cmd.arguments and not cmd.positionals and not cmd.include_common and not cmd.subcommands:
             continue
         lines.extend(_generate_bash_command_case(cmd, schema))
 
@@ -443,10 +416,7 @@ def generate_zsh_completion(schema: CLISchema) -> str:
             arg_lines = _generate_zsh_command_args(cmd, schema)
             if arg_lines:
                 lines.append("                    _arguments \\")
-                lines.append(
-                    "                        "
-                    + " \\\n                        ".join(arg_lines)
-                )
+                lines.append("                        " + " \\\n                        ".join(arg_lines))
             else:
                 # Explicitly disable default completion for commands with no args
                 lines.append("                    :")

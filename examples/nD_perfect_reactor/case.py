@@ -8,9 +8,7 @@ import cantera as ct
 
 from mfc.case_utils import *
 
-parser = argparse.ArgumentParser(
-    prog="nD_perfect_reactor", formatter_class=argparse.ArgumentDefaultsHelpFormatter
-)
+parser = argparse.ArgumentParser(prog="nD_perfect_reactor", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument(
     "--mfc",

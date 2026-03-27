@@ -13,12 +13,7 @@ from rich.panel import Panel
 
 from .. import common, sched
 from ..build import HDF5, POST_PROCESS, PRE_PROCESS, SIMULATION, build
-from ..common import (
-    MFCException,
-    does_command_exist,
-    format_list_to_string,
-    get_program_output,
-)
+from ..common import MFCException, does_command_exist, format_list_to_string, get_program_output
 from ..packer import packer
 from ..packer import tol as packtol
 from ..printer import cons
@@ -108,17 +103,13 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
             break
 
     if not bFoundTo:
-        raise MFCException(
-            "Testing: Your specified range [--from,--to] is incorrect. Please ensure both IDs exist and are in the correct order."
-        )
+        raise MFCException("Testing: Your specified range [--from,--to] is incorrect. Please ensure both IDs exist and are in the correct order.")
 
     if len(ARG("only")) > 0:
         cases, skipped_cases = _filter_only(cases, skipped_cases)
 
         if not cases:
-            raise MFCException(
-                f"--only filter matched zero test cases. Specified: {ARG('only')}. Check that UUIDs/names are valid."
-            )
+            raise MFCException(f"--only filter matched zero test cases. Specified: {ARG('only')}. Check that UUIDs/names are valid.")
 
     # --only-changes: filter based on file-level gcov coverage
     if ARG("only_changes"):
@@ -132,41 +123,27 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
         cache = load_coverage_cache(common.MFC_ROOT_DIR)
         if cache is None:
             cons.print("[yellow]Coverage cache missing or stale.[/yellow]")
-            cons.print(
-                "[yellow]Run: ./mfc.sh build --gcov -j 8 && ./mfc.sh test --build-coverage-cache --gcov -j 8[/yellow]"
-            )
+            cons.print("[yellow]Run: ./mfc.sh build --gcov -j 8 && ./mfc.sh test --build-coverage-cache --gcov -j 8[/yellow]")
             cons.print("[yellow]Falling back to full test suite.[/yellow]")
         else:
-            changed_files = get_changed_files(
-                common.MFC_ROOT_DIR, ARG("changes_branch")
-            )
+            changed_files = get_changed_files(common.MFC_ROOT_DIR, ARG("changes_branch"))
 
             if changed_files is None:
-                cons.print(
-                    "[yellow]git diff failed — falling back to full test suite.[/yellow]"
-                )
+                cons.print("[yellow]git diff failed — falling back to full test suite.[/yellow]")
             elif should_run_all_tests(changed_files):
                 cons.print()
                 cons.print("[bold cyan]Coverage Change Analysis[/bold cyan]")
                 cons.print("-" * 50)
-                cons.print(
-                    "[yellow]Infrastructure or macro file changed — running full test suite.[/yellow]"
-                )
+                cons.print("[yellow]Infrastructure or macro file changed — running full test suite.[/yellow]")
                 cons.print("-" * 50)
             else:
                 changed_fpp = {f for f in changed_files if f.endswith(".fpp")}
-                changed_f90 = {
-                    f
-                    for f in changed_files
-                    if f.startswith("src/") and (f.endswith(".f90") or f.endswith(".f"))
-                }
+                changed_f90 = {f for f in changed_files if f.startswith("src/") and (f.endswith(".f90") or f.endswith(".f"))}
                 if changed_f90:
                     cons.print()
                     cons.print("[bold cyan]Coverage Change Analysis[/bold cyan]")
                     cons.print("-" * 50)
-                    cons.print(
-                        "[yellow].f90/.f source changed — running full test suite.[/yellow]"
-                    )
+                    cons.print("[yellow].f90/.f source changed — running full test suite.[/yellow]")
                     for f in sorted(changed_f90):
                         cons.print(f"  [yellow]*[/yellow] {f}")
                     cons.print("-" * 50)
@@ -174,9 +151,7 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
                     cons.print()
                     cons.print("[bold cyan]Coverage Change Analysis[/bold cyan]")
                     cons.print("-" * 50)
-                    cons.print(
-                        "[green]No Fortran source changes detected — skipping all tests.[/green]"
-                    )
+                    cons.print("[green]No Fortran source changes detected — skipping all tests.[/green]")
                     cons.print("-" * 50)
                     cons.print()
                     skipped_cases += cases
@@ -188,13 +163,9 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
                     for fpp_file in sorted(changed_fpp):
                         cons.print(f"  [green]*[/green] {fpp_file}")
 
-                    cases, new_skipped = filter_tests_by_coverage(
-                        cases, cache, changed_files
-                    )
+                    cases, new_skipped = filter_tests_by_coverage(cases, cache, changed_files)
                     skipped_cases += new_skipped
-                    cons.print(
-                        f"\n[bold]Tests to run: {len(cases)} / {len(cases) + len(new_skipped)}[/bold]"
-                    )
+                    cons.print(f"\n[bold]Tests to run: {len(cases)} / {len(cases) + len(new_skipped)}[/bold]")
                     cons.print("-" * 50)
                     cons.print()
 
@@ -205,19 +176,7 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
 
     for case in cases[:]:
         if ARG("single"):
-            skip = [
-                "low_Mach",
-                "Hypoelasticity",
-                "teno",
-                "Chemistry",
-                "Phase Change model 6",
-                "Axisymmetric",
-                "Transducer",
-                "Transducer Array",
-                "Cylindrical",
-                "HLLD",
-                "Example",
-            ]
+            skip = ["low_Mach", "Hypoelasticity", "teno", "Chemistry", "Phase Change model 6", "Axisymmetric", "Transducer", "Transducer Array", "Cylindrical", "HLLD", "Example"]
             if any(label in case.trace for label in skip):
                 cases.remove(case)
                 skipped_cases.append(case)
@@ -235,25 +194,14 @@ def __filter(cases_) -> typing.Tuple[typing.List[TestCase], typing.List[TestCase
 
     if ARG("shard") is not None:
         parts = ARG("shard").split("/")
-        if (
-            len(parts) != 2
-            or not all(p.isdigit() for p in parts)
-            or int(parts[1]) < 1
-            or not 1 <= int(parts[0]) <= int(parts[1])
-        ):
-            raise MFCException(
-                f"Invalid --shard '{ARG('shard')}': expected 'i/n' with 1 <= i <= n (e.g., '1/2')."
-            )
+        if len(parts) != 2 or not all(p.isdigit() for p in parts) or int(parts[1]) < 1 or not 1 <= int(parts[0]) <= int(parts[1]):
+            raise MFCException(f"Invalid --shard '{ARG('shard')}': expected 'i/n' with 1 <= i <= n (e.g., '1/2').")
         shard_idx, shard_count = int(parts[0]), int(parts[1])
-        skipped_cases += [
-            c for i, c in enumerate(cases) if i % shard_count != shard_idx - 1
-        ]
+        skipped_cases += [c for i, c in enumerate(cases) if i % shard_count != shard_idx - 1]
         cases = [c for i, c in enumerate(cases) if i % shard_count == shard_idx - 1]
 
         if not cases:
-            raise MFCException(
-                f"--shard {ARG('shard')} matched zero test cases. Total cases before sharding may be less than shard count."
-            )
+            raise MFCException(f"--shard {ARG('shard')} matched zero test cases. Total cases before sharding may be less than shard count.")
 
     if ARG("percent") == 100:
         return cases, skipped_cases
@@ -336,20 +284,14 @@ def test():
     range_str = f"from [bold magenta]{ARG('from')}[/bold magenta] to [bold magenta]{ARG('to')}[/bold magenta]"
 
     if len(ARG("only")) > 0:
-        range_str = "Only " + format_list_to_string(
-            ARG("only"), "bold magenta", "Nothing to run"
-        )
+        range_str = "Only " + format_list_to_string(ARG("only"), "bold magenta", "Nothing to run")
 
-    cons.print(
-        f"[bold]Test {format_list_to_string([x.name for x in codes], 'magenta')}[/bold] | {range_str} ({len(cases)} test{'s' if len(cases) != 1 else ''})"
-    )
+    cons.print(f"[bold]Test {format_list_to_string([x.name for x in codes], 'magenta')}[/bold] | {range_str} ({len(cases)} test{'s' if len(cases) != 1 else ''})")
     cons.indent()
 
     # Run cases with multiple threads (if available)
     cons.print()
-    cons.print(
-        "  Progress      Test Name                                        Time(s)   UUID"
-    )
+    cons.print("  Progress      Test Name                                        Time(s)   UUID")
     cons.print()
 
     # Select the correct number of threads to use to launch test cases
@@ -357,16 +299,7 @@ def test():
     # because running a test case may cause it to rebuild, and thus
     # interfere with the other test cases. It is a niche feature so we won't
     # engineer around this issue (for now).
-    sched.sched(
-        [
-            sched.Task(
-                ppn=case.ppn, func=handle_case, args=[case], load=case.get_cell_count()
-            )
-            for case in cases
-        ],
-        ARG("jobs"),
-        ARG("gpus"),
-    )
+    sched.sched([sched.Task(ppn=case.ppn, func=handle_case, args=[case], load=case.get_cell_count()) for case in cases], ARG("jobs"), ARG("gpus"))
 
     # Check if we aborted due to high failure rate
     if abort_tests.is_set():
@@ -381,12 +314,8 @@ def test():
         cons.print()
         cons.unindent()
         if total_completed > 0:
-            raise MFCException(
-                f"Excessive test failures: {nFAIL}/{total_completed} failed ({nFAIL / total_completed * 100:.1f}%)"
-            )
-        raise MFCException(
-            f"Excessive test failures: {nFAIL} failed, but no tests were completed."
-        )
+            raise MFCException(f"Excessive test failures: {nFAIL}/{total_completed} failed ({nFAIL / total_completed * 100:.1f}%)")
+        raise MFCException(f"Excessive test failures: {nFAIL} failed, but no tests were completed.")
 
     nSKIP = len(skipped_cases)
     cons.print()
@@ -398,9 +327,7 @@ def test():
     seconds = total_duration % 60
 
     # Build the summary report
-    _print_test_summary(
-        nPASS, nFAIL, nSKIP, minutes, seconds, failed_tests, skipped_cases
-    )
+    _print_test_summary(nPASS, nFAIL, nSKIP, minutes, seconds, failed_tests, skipped_cases)
 
     # Write failed UUIDs to file for CI retry logic
     if failed_tests:
@@ -413,15 +340,7 @@ def test():
     sys.exit(nFAIL)
 
 
-def _print_test_summary(
-    passed: int,
-    failed: int,
-    skipped: int,
-    minutes: int,
-    seconds: float,
-    failed_test_list: list,
-    _skipped_cases: list,
-):
+def _print_test_summary(passed: int, failed: int, skipped: int, minutes: int, seconds: float, failed_test_list: list, _skipped_cases: list):
     """Print a comprehensive test summary report."""
     total = passed + failed + skipped
 
@@ -432,9 +351,7 @@ def _print_test_summary(
         border_style = "green"
     else:
         status_icon = "[bold red]✗[/bold red]"
-        status_text = (
-            f"[bold red]{failed} TEST{'S' if failed != 1 else ''} FAILED[/bold red]"
-        )
+        status_text = f"[bold red]{failed} TEST{'S' if failed != 1 else ''} FAILED[/bold red]"
         border_style = "red"
 
     # Format time string
@@ -471,33 +388,18 @@ def _print_test_summary(
             if error_type:
                 summary_lines.append(f"      [dim]({error_type})[/dim]")
         if len(failed_test_list) > 10:
-            summary_lines.append(
-                f"    [dim]... and {len(failed_test_list) - 10} more[/dim]"
-            )
+            summary_lines.append(f"    [dim]... and {len(failed_test_list) - 10} more[/dim]")
 
     # Add next steps for failures
     if failed > 0:
         summary_lines.append("")
         summary_lines.append("  [bold]Next Steps:[/bold]")
-        summary_lines.append(
-            "    • Run with [cyan]--generate[/cyan] to update golden files (if changes are intentional)"
-        )
-        summary_lines.append(
-            "    • Check individual test output in [cyan]tests/<UUID>/[/cyan]"
-        )
-        summary_lines.append(
-            "    • Run specific test: [cyan]./mfc.sh test --only <UUID>[/cyan]"
-        )
+        summary_lines.append("    • Run with [cyan]--generate[/cyan] to update golden files (if changes are intentional)")
+        summary_lines.append("    • Check individual test output in [cyan]tests/<UUID>/[/cyan]")
+        summary_lines.append("    • Run specific test: [cyan]./mfc.sh test --only <UUID>[/cyan]")
 
     cons.print()
-    cons.raw.print(
-        Panel(
-            "\n".join(summary_lines),
-            title="[bold]Test Summary[/bold]",
-            border_style=border_style,
-            padding=(1, 2),
-        )
-    )
+    cons.raw.print(Panel("\n".join(summary_lines), title="[bold]Test Summary[/bold]", border_style=border_style, padding=(1, 2)))
     cons.print()
 
 
@@ -513,19 +415,13 @@ def _process_silo_file(silo_filepath: str, case: TestCase, out_filepath: str):
     output, err = get_program_output([h5dump, silo_filepath])
 
     if err != 0:
-        raise MFCException(
-            f"Test {case}: Failed to run h5dump. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}."
-        )
+        raise MFCException(f"Test {case}: Failed to run h5dump. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}.")
 
     if "nan," in output:
-        raise MFCException(
-            f"Test {case}: Post Process has detected a NaN. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}."
-        )
+        raise MFCException(f"Test {case}: Post Process has detected a NaN. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}.")
 
     if "inf," in output:
-        raise MFCException(
-            f"Test {case}: Post Process has detected an Infinity. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}."
-        )
+        raise MFCException(f"Test {case}: Post Process has detected an Infinity. You can find the run's output in {out_filepath}, and the case dictionary in {case.get_filepath()}.")
 
 
 def _handle_case(case: TestCase, devices: typing.Set[int]):
@@ -547,9 +443,7 @@ def _handle_case(case: TestCase, devices: typing.Set[int]):
     if ARG("dry_run"):
         # Truncate long traces for readability
         trace_display = case.trace if len(case.trace) <= 50 else case.trace[:47] + "..."
-        cons.print(
-            f"  (dry-run)     {trace_display:50s}   SKIP    [magenta]{case.get_uuid()}[/magenta]"
-        )
+        cons.print(f"  (dry-run)     {trace_display:50s}   SKIP    [magenta]{case.get_uuid()}[/magenta]")
         timeout_timer.cancel()
         return
 
@@ -584,9 +478,7 @@ def _handle_case(case: TestCase, devices: typing.Set[int]):
             pack.save(golden_filepath)
         else:
             if not os.path.isfile(golden_filepath):
-                raise MFCException(
-                    f"Test {case}: The golden file does not exist! To generate golden files, use the '--generate' flag."
-                )
+                raise MFCException(f"Test {case}: The golden file does not exist! To generate golden files, use the '--generate' flag.")
 
             golden = packer.load(golden_filepath)
 
@@ -601,9 +493,7 @@ def _handle_case(case: TestCase, devices: typing.Set[int]):
 
                 golden.save(golden_filepath)
             else:
-                err, msg = packtol.compare(
-                    pack, packer.load(golden_filepath), packtol.Tolerance(tol, tol)
-                )
+                err, msg = packtol.compare(pack, packer.load(golden_filepath), packtol.Tolerance(tol, tol))
                 if msg is not None:
                     raise MFCException(f"Test {case}: {msg}")
 
@@ -631,21 +521,15 @@ def _handle_case(case: TestCase, devices: typing.Set[int]):
         progress_str = f"({current_test_number:3d}/{total_test_count:3d})"
         # Truncate long traces for readability, showing test name prominently
         trace_display = case.trace if len(case.trace) <= 50 else case.trace[:47] + "..."
-        cons.print(
-            f"  {progress_str}    {trace_display:50s}  {duration:6.2f}    [magenta]{case.get_uuid()}[/magenta]"
-        )
+        cons.print(f"  {progress_str}    {trace_display:50s}  {duration:6.2f}    [magenta]{case.get_uuid()}[/magenta]")
 
     except TestTimeoutError as exc:
         log_path = os.path.join(case.get_dirpath(), "out_pre_sim.txt")
         if os.path.exists(log_path):
             log_msg = f"Check the log at: {log_path}"
         else:
-            log_msg = (
-                f"Log file ({log_path}) may not exist if the timeout occurred early."
-            )
-        raise MFCException(
-            f"Test {case} exceeded 1 hour timeout. This may indicate a hung simulation or misconfigured case. {log_msg}"
-        ) from exc
+            log_msg = f"Log file ({log_path}) may not exist if the timeout occurred early."
+        raise MFCException(f"Test {case} exceeded 1 hour timeout. This may indicate a hung simulation or misconfigured case. {log_msg}") from exc
     finally:
         timeout_timer.cancel()  # Cancel timeout timer
 
@@ -679,9 +563,7 @@ def handle_case(case: TestCase, devices: typing.Set[int]):
             nFAIL += 1
 
             # Enhanced real-time failure feedback
-            trace_display = (
-                case.trace if len(case.trace) <= 50 else case.trace[:47] + "..."
-            )
+            trace_display = case.trace if len(case.trace) <= 50 else case.trace[:47] + "..."
             cons.print()
             cons.print(f"  [bold red]✗ FAILED:[/bold red] {trace_display}")
             cons.print(f"    UUID: [magenta]{case.get_uuid()}[/magenta]")
@@ -695,22 +577,12 @@ def handle_case(case: TestCase, devices: typing.Set[int]):
 
             # Provide helpful hints based on error type
             exc_lower = str(exc).lower()
-            if (
-                "tolerance" in exc_lower
-                or "golden" in exc_lower
-                or "mismatch" in exc_lower
-            ):
-                cons.print(
-                    "    [dim]Hint: Consider --generate to update golden files or check tolerances[/dim]"
-                )
+            if "tolerance" in exc_lower or "golden" in exc_lower or "mismatch" in exc_lower:
+                cons.print("    [dim]Hint: Consider --generate to update golden files or check tolerances[/dim]")
             elif "timeout" in exc_lower:
-                cons.print(
-                    "    [dim]Hint: Test may be hanging - check case configuration[/dim]"
-                )
+                cons.print("    [dim]Hint: Test may be hanging - check case configuration[/dim]")
             elif "nan" in exc_lower:
-                cons.print(
-                    "    [dim]Hint: NaN detected - check numerical stability of the case[/dim]"
-                )
+                cons.print("    [dim]Hint: NaN detected - check numerical stability of the case[/dim]")
             elif "failed to execute" in exc_lower:
                 cons.print("    [dim]Hint: Check build logs and case parameters[/dim]")
             cons.print()
@@ -718,11 +590,7 @@ def handle_case(case: TestCase, devices: typing.Set[int]):
             # Track failed test details for summary
             error_type = ""
             exc_lower = str(exc).lower()
-            if (
-                "tolerance" in exc_lower
-                or "golden" in exc_lower
-                or "mismatch" in exc_lower
-            ):
+            if "tolerance" in exc_lower or "golden" in exc_lower or "mismatch" in exc_lower:
                 error_type = "tolerance mismatch"
             elif "timeout" in exc_lower:
                 error_type = "timeout"
@@ -731,19 +599,10 @@ def handle_case(case: TestCase, devices: typing.Set[int]):
             elif "failed to execute" in exc_lower:
                 error_type = "execution failed"
 
-            failed_tests.append(
-                {
-                    "trace": case.trace,
-                    "uuid": case.get_uuid(),
-                    "error_type": error_type,
-                    "attempts": nAttempts,
-                }
-            )
+            failed_tests.append({"trace": case.trace, "uuid": case.get_uuid(), "error_type": error_type, "attempts": nAttempts})
 
             # Still collect for final summary
-            errors.append(
-                f"[bold red]Failed test {case} after {nAttempts} attempt(s).[/bold red]"
-            )
+            errors.append(f"[bold red]Failed test {case} after {nAttempts} attempt(s).[/bold red]")
             errors.append(f"{exc}")
 
         # Check if we should abort early due to high failure rate
@@ -753,15 +612,9 @@ def handle_case(case: TestCase, devices: typing.Set[int]):
             if total_completed >= MIN_CASES_BEFORE_ABORT:
                 failure_rate = nFAIL / total_completed
                 if failure_rate >= FAILURE_RATE_THRESHOLD:
-                    cons.print(
-                        f"\n[bold red]CRITICAL: {failure_rate * 100:.1f}% failure rate detected after {total_completed} tests.[/bold red]"
-                    )
-                    cons.print(
-                        "[bold red]This suggests a systemic issue (bad build, broken environment, etc.)[/bold red]"
-                    )
-                    cons.print(
-                        "[bold red]Aborting remaining tests to fail fast.[/bold red]\n"
-                    )
+                    cons.print(f"\n[bold red]CRITICAL: {failure_rate * 100:.1f}% failure rate detected after {total_completed} tests.[/bold red]")
+                    cons.print("[bold red]This suggests a systemic issue (bad build, broken environment, etc.)[/bold red]")
+                    cons.print("[bold red]Aborting remaining tests to fail fast.[/bold red]\n")
                     # Set abort flag instead of raising exception from worker thread
                     abort_tests.set()
                     return  # Exit gracefully

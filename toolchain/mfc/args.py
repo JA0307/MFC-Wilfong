@@ -112,16 +112,7 @@ def parse(config: MFCConfig):
     # Add default arguments of other subparsers
     # This ensures all argument keys exist even for commands that don't define them
     # Only process subparsers that have common arguments we need
-    relevant_subparsers = [
-        "run",
-        "test",
-        "build",
-        "clean",
-        "count",
-        "count_diff",
-        "validate",
-        "viz",
-    ]
+    relevant_subparsers = ["run", "test", "build", "clean", "count", "count_diff", "validate", "viz"]
     for name in relevant_subparsers:
         if args["command"] == name:
             continue
@@ -156,25 +147,17 @@ def parse(config: MFCConfig):
         sys.exit(0)
 
     # "Slugify" the name of the job (only for batch jobs, not for new command)
-    if (
-        args.get("name") is not None
-        and isinstance(args["name"], str)
-        and args["command"] != "new"
-    ):
+    if args.get("name") is not None and isinstance(args["name"], str) and args["command"] != "new":
         args["name"] = re.sub(r"[\W_]+", "-", args["name"])
 
     # We need to check for some invalid combinations of arguments because of
     # the limitations of argparse.
     if args["command"] == "build":
         if (args["input"] is not None) ^ args["case_optimization"]:
-            raise MFCException(
-                "./mfc.sh build's --case-optimization and --input must be used together."
-            )
+            raise MFCException("./mfc.sh build's --case-optimization and --input must be used together.")
     if args["command"] == "run":
         if args["binary"] is not None and args["engine"] != "interactive":
-            raise MFCException(
-                "./mfc.sh run's --binary can only be used with --engine=interactive."
-            )
+            raise MFCException("./mfc.sh run's --binary can only be used with --engine=interactive.")
 
     # Resolve test case defaults (deferred to avoid slow startup for non-test commands)
     if args["command"] == "test":

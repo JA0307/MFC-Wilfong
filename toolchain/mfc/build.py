@@ -10,25 +10,11 @@ import time
 import typing
 
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
 from .case import Case
-from .common import (
-    MFCException,
-    create_directory,
-    debug,
-    delete_directory,
-    format_list_to_string,
-    system,
-)
+from .common import MFCException, create_directory, debug, delete_directory, format_list_to_string, system
 from .printer import cons
 from .run import input
 from .state import ARG, CFG, gpuConfigOptions
@@ -41,9 +27,7 @@ _NINJA_PROGRESS_RE = re.compile(r"^\[(\d+)/(\d+)\]\s+(.*)$")
 _MAKE_PROGRESS_RE = re.compile(r"^\[\s*(\d+)%\]\s+(.*)$")
 
 
-def _run_build_with_progress(
-    command: typing.List[str], target_name: str, streaming: bool = False
-) -> subprocess.CompletedProcess:
+def _run_build_with_progress(command: typing.List[str], target_name: str, streaming: bool = False) -> subprocess.CompletedProcess:
     """
     Run a build command with a progress bar that parses ninja output.
 
@@ -78,9 +62,7 @@ def _run_build_with_progress(
             bufsize=1,  # Line buffered
         )
 
-        cons.print(
-            f"  [bold blue]Building[/bold blue] [magenta]{target_name}[/magenta] [dim](-v)[/dim]..."
-        )
+        cons.print(f"  [bold blue]Building[/bold blue] [magenta]{target_name}[/magenta] [dim](-v)[/dim]...")
         start_time = time.time()
 
         # Read merged stdout+stderr and print matching lines
@@ -97,11 +79,7 @@ def _run_build_with_progress(
                 # Extract filename from action
                 parts = action.split()
                 if len(parts) >= 3:
-                    filename = (
-                        os.path.basename(parts[-1])
-                        .replace(".o", "")
-                        .replace(".obj", "")
-                    )
+                    filename = os.path.basename(parts[-1]).replace(".o", "").replace(".obj", "")
                     if len(filename) > 40:
                         filename = filename[:37] + "..."
                     cons.print(f"  [dim][{completed}/{total}][/dim] {filename}")
@@ -117,9 +95,7 @@ def _run_build_with_progress(
                 if len(parts) >= 3:
                     # Get the last part which is usually the file path
                     obj_path = parts[-1]
-                    filename = (
-                        os.path.basename(obj_path).replace(".o", "").replace(".obj", "")
-                    )
+                    filename = os.path.basename(obj_path).replace(".o", "").replace(".obj", "")
                     if len(filename) > 40:
                         filename = filename[:37] + "..."
                     cons.print(f"  [dim][{percent:>3}%][/dim] {filename}")
@@ -130,9 +106,7 @@ def _run_build_with_progress(
         if elapsed > 5:
             cons.print(f"  [dim](build took {elapsed:.1f}s)[/dim]")
 
-        return subprocess.CompletedProcess(
-            cmd, process.returncode, "".join(all_stdout), ""
-        )
+        return subprocess.CompletedProcess(cmd, process.returncode, "".join(all_stdout), "")
 
     # Start the process for non-streaming modes
     process = subprocess.Popen(
@@ -145,9 +119,7 @@ def _run_build_with_progress(
 
     if not is_tty:
         # Non-interactive, non-streaming: show message with elapsed time
-        cons.print(
-            f"  [bold blue]Building[/bold blue] [magenta]{target_name}[/magenta]..."
-        )
+        cons.print(f"  [bold blue]Building[/bold blue] [magenta]{target_name}[/magenta]...")
         start_time = time.time()
         stdout, stderr = process.communicate()
         elapsed = time.time() - start_time
@@ -164,9 +136,7 @@ def _run_build_with_progress(
     # Create a custom progress display
     with Progress(
         SpinnerColumn(),
-        TextColumn(
-            "[bold blue]Building[/bold blue] [magenta]{task.fields[target]}[/magenta]"
-        ),
+        TextColumn("[bold blue]Building[/bold blue] [magenta]{task.fields[target]}[/magenta]"),
         BarColumn(bar_width=30),
         TaskProgressColumn(),
         TextColumn("•"),
@@ -177,9 +147,7 @@ def _run_build_with_progress(
         refresh_per_second=4,
     ) as progress:
         # Start with indeterminate progress (total=None shows spinner behavior)
-        task = progress.add_task(
-            "build", total=None, target=target_name, current_file=""
-        )
+        task = progress.add_task("build", total=None, target=target_name, current_file="")
 
         # Use threads to read stdout and stderr concurrently
         stdout_queue = queue.Queue()
@@ -225,11 +193,7 @@ def _run_build_with_progress(
                             parts = action.split()
                             if len(parts) >= 3:
                                 obj_path = parts[-1]
-                                current_file = (
-                                    os.path.basename(obj_path)
-                                    .replace(".o", "")
-                                    .replace(".obj", "")
-                                )
+                                current_file = os.path.basename(obj_path).replace(".o", "").replace(".obj", "")
                                 if len(current_file) > 30:
                                     current_file = current_file[:27] + "..."
 
@@ -237,9 +201,7 @@ def _run_build_with_progress(
                             progress_detected = True
                             progress.update(task, total=total_files)
 
-                        progress.update(
-                            task, completed=completed_files, current_file=current_file
-                        )
+                        progress.update(task, completed=completed_files, current_file=current_file)
                     else:
                         # Try make format: [ 16%] Action
                         make_match = _MAKE_PROGRESS_RE.match(stripped)
@@ -252,11 +214,7 @@ def _run_build_with_progress(
                                 parts = action.split()
                                 if len(parts) >= 3:
                                     obj_path = parts[-1]
-                                    current_file = (
-                                        os.path.basename(obj_path)
-                                        .replace(".o", "")
-                                        .replace(".obj", "")
-                                    )
+                                    current_file = os.path.basename(obj_path).replace(".o", "").replace(".obj", "")
                                     if len(current_file) > 30:
                                         current_file = current_file[:27] + "..."
 
@@ -265,9 +223,7 @@ def _run_build_with_progress(
                                 # Make uses percentage, so set total to 100
                                 progress.update(task, total=100)
 
-                            progress.update(
-                                task, completed=percent, current_file=current_file
-                            )
+                            progress.update(task, completed=percent, current_file=current_file)
             except queue.Empty:
                 pass
 
@@ -292,9 +248,7 @@ def _run_build_with_progress(
         stdout_thread.join(timeout=1)
         stderr_thread.join(timeout=1)
 
-    return subprocess.CompletedProcess(
-        cmd, process.returncode, "".join(all_stdout), "".join(all_stderr)
-    )
+    return subprocess.CompletedProcess(cmd, process.returncode, "".join(all_stdout), "".join(all_stderr))
 
 
 def _show_build_error(result: subprocess.CompletedProcess, stage: str):
@@ -304,24 +258,14 @@ def _show_build_error(result: subprocess.CompletedProcess, stage: str):
 
     # Show stdout if available (often contains the actual error for CMake)
     if result.stdout:
-        stdout_text = (
-            result.stdout
-            if isinstance(result.stdout, str)
-            else result.stdout.decode("utf-8", errors="replace")
-        )
+        stdout_text = result.stdout if isinstance(result.stdout, str) else result.stdout.decode("utf-8", errors="replace")
         stdout_text = stdout_text.strip()
         if stdout_text:
-            cons.raw.print(
-                Panel(Text(stdout_text), title="Output", border_style="yellow")
-            )
+            cons.raw.print(Panel(Text(stdout_text), title="Output", border_style="yellow"))
 
     # Show stderr if available
     if result.stderr:
-        stderr_text = (
-            result.stderr
-            if isinstance(result.stderr, str)
-            else result.stderr.decode("utf-8", errors="replace")
-        )
+        stderr_text = result.stderr if isinstance(result.stderr, str) else result.stderr.decode("utf-8", errors="replace")
         stderr_text = stderr_text.strip()
         if stderr_text:
             cons.raw.print(Panel(Text(stderr_text), title="Errors", border_style="red"))
@@ -339,11 +283,7 @@ class MFCTarget:
 
         def compute(self) -> typing.Set:
             r = self.all[:]
-            r += (
-                self.gpu[:]
-                if (ARG("gpu") != gpuConfigOptions.NONE.value)
-                else self.cpu[:]
-            )
+            r += self.gpu[:] if (ARG("gpu") != gpuConfigOptions.NONE.value) else self.cpu[:]
 
             return r
 
@@ -402,9 +342,7 @@ class MFCTarget:
     def is_configured(self, case: Case) -> bool:
         # We assume that if the CMakeCache.txt file exists, then the target is
         # configured. (this isn't perfect, but it's good enough for now)
-        return os.path.isfile(
-            os.sep.join([self.get_staging_dirpath(case), "CMakeCache.txt"])
-        )
+        return os.path.isfile(os.sep.join([self.get_staging_dirpath(case), "CMakeCache.txt"]))
 
     def get_configuration_txt(self, case: Case) -> typing.Optional[dict]:
         if not self.is_configured(case):
@@ -431,9 +369,7 @@ class MFCTarget:
         cmake_dirpath = self.get_cmake_dirpath()
         install_dirpath = self.get_install_dirpath(case)
 
-        install_prefixes = ";".join(
-            [t.get_install_dirpath(case) for t in self.requires.compute()]
-        )
+        install_prefixes = ";".join([t.get_install_dirpath(case) for t in self.requires.compute()])
 
         flags: list = self.flags.copy() + [
             # Disable CMake warnings intended for developers (us).
@@ -476,12 +412,8 @@ class MFCTarget:
             flags.append(f"-DMFC_MPI={'ON' if ARG('mpi') else 'OFF'}")
             # flags.append(f"-DMFC_OpenACC={'ON' if ARG('acc') else 'OFF'}")
             # flags.append(f"-DMFC_OpenMP={'ON' if ARG('mp') else 'OFF'}")
-            flags.append(
-                f"-DMFC_OpenACC={'ON' if (ARG('gpu') == gpuConfigOptions.ACC.value) else 'OFF'}"
-            )
-            flags.append(
-                f"-DMFC_OpenMP={'ON' if (ARG('gpu') == gpuConfigOptions.MP.value) else 'OFF'}"
-            )
+            flags.append(f"-DMFC_OpenACC={'ON' if (ARG('gpu') == gpuConfigOptions.ACC.value) else 'OFF'}")
+            flags.append(f"-DMFC_OpenMP={'ON' if (ARG('gpu') == gpuConfigOptions.MP.value) else 'OFF'}")
             flags.append(f"-DMFC_GCov={'ON' if ARG('gcov') else 'OFF'}")
             flags.append(f"-DMFC_Unified={'ON' if ARG('unified') else 'OFF'}")
             flags.append(f"-DMFC_Fastmath={'ON' if ARG('fastmath') else 'OFF'}")
@@ -500,52 +432,30 @@ class MFCTarget:
         if verbosity >= 2:
             # -vv or higher: show raw cmake output
             level_str = "vv" + "v" * (verbosity - 2) if verbosity > 2 else "vv"
-            cons.print(
-                f"  [bold blue]Configuring[/bold blue] [magenta]{self.name}[/magenta] [dim](-{level_str})[/dim]..."
-            )
+            cons.print(f"  [bold blue]Configuring[/bold blue] [magenta]{self.name}[/magenta] [dim](-{level_str})[/dim]...")
             if verbosity >= 2:
                 cons.print(f"  [dim]$ {' '.join(str(c) for c in command)}[/dim]")
             cons.print()
             result = system(command, print_cmd=False)
         else:
             # Normal mode: capture output, show on error
-            cons.print(
-                f"  [bold blue]Configuring[/bold blue] [magenta]{self.name}[/magenta]..."
-            )
-            result = system(
-                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, print_cmd=False
-            )
+            cons.print(f"  [bold blue]Configuring[/bold blue] [magenta]{self.name}[/magenta]...")
+            result = system(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, print_cmd=False)
 
         if result.returncode != 0:
-            cons.print(
-                f"  [bold red]✗[/bold red] Configuration failed for [magenta]{self.name}[/magenta]"
-            )
+            cons.print(f"  [bold red]✗[/bold red] Configuration failed for [magenta]{self.name}[/magenta]")
             if verbosity < 2:
                 _show_build_error(result, "Configuration")
             Tips.after_build_failure()
-            raise MFCException(
-                f"Failed to configure the [bold magenta]{self.name}[/bold magenta] target."
-            )
+            raise MFCException(f"Failed to configure the [bold magenta]{self.name}[/bold magenta] target.")
 
-        cons.print(
-            f"  [bold green]✓[/bold green] Configured [magenta]{self.name}[/magenta]"
-        )
+        cons.print(f"  [bold green]✓[/bold green] Configured [magenta]{self.name}[/magenta]")
         cons.print(no_indent=True)
 
     def build(self, case: input.MFCInputFile):
         case.generate_fpp(self)
 
-        command = [
-            "cmake",
-            "--build",
-            self.get_staging_dirpath(case),
-            "--target",
-            self.name,
-            "--parallel",
-            ARG("jobs"),
-            "--config",
-            "Debug" if ARG("debug") else "Release",
-        ]
+        command = ["cmake", "--build", self.get_staging_dirpath(case), "--target", self.name, "--parallel", ARG("jobs"), "--config", "Debug" if ARG("debug") else "Release"]
 
         verbosity = ARG("verbose")
         # -vv or higher: add cmake --verbose flag for full compiler commands
@@ -558,9 +468,7 @@ class MFCTarget:
         if verbosity >= 2:
             # -vv or higher: show raw compiler output (full verbose)
             level_str = "vv" + "v" * (verbosity - 2) if verbosity > 2 else "vv"
-            cons.print(
-                f"  [bold blue]Building[/bold blue] [magenta]{self.name}[/magenta] [dim](-{level_str})[/dim]..."
-            )
+            cons.print(f"  [bold blue]Building[/bold blue] [magenta]{self.name}[/magenta] [dim](-{level_str})[/dim]...")
             cons.print(f"  [dim]$ {' '.join(str(c) for c in command)}[/dim]")
             cons.print()
             result = system(command, print_cmd=False)
@@ -572,15 +480,11 @@ class MFCTarget:
             result = _run_build_with_progress(command, self.name, streaming=False)
 
         if result.returncode != 0:
-            cons.print(
-                f"  [bold red]✗[/bold red] Build failed for [magenta]{self.name}[/magenta]"
-            )
+            cons.print(f"  [bold red]✗[/bold red] Build failed for [magenta]{self.name}[/magenta]")
             if verbosity < 2:
                 _show_build_error(result, "Build")
             Tips.after_build_failure()
-            raise MFCException(
-                f"Failed to build the [bold magenta]{self.name}[/bold magenta] target."
-            )
+            raise MFCException(f"Failed to build the [bold magenta]{self.name}[/bold magenta] target.")
 
         cons.print(f"  [bold green]✓[/bold green] Built [magenta]{self.name}[/magenta]")
         cons.print(no_indent=True)
@@ -589,133 +493,32 @@ class MFCTarget:
         command = ["cmake", "--install", self.get_staging_dirpath(case)]
 
         # Show progress indicator during install
-        cons.print(
-            f"  [bold blue]Installing[/bold blue] [magenta]{self.name}[/magenta]..."
-        )
+        cons.print(f"  [bold blue]Installing[/bold blue] [magenta]{self.name}[/magenta]...")
 
         # Capture output to show detailed errors on failure
-        result = system(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, print_cmd=False
-        )
+        result = system(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, print_cmd=False)
         if result.returncode != 0:
-            cons.print(
-                f"  [bold red]✗[/bold red] Install failed for [magenta]{self.name}[/magenta]"
-            )
+            cons.print(f"  [bold red]✗[/bold red] Install failed for [magenta]{self.name}[/magenta]")
             _show_build_error(result, "Install")
-            raise MFCException(
-                f"Failed to install the [bold magenta]{self.name}[/bold magenta] target."
-            )
+            raise MFCException(f"Failed to install the [bold magenta]{self.name}[/bold magenta] target.")
 
-        cons.print(
-            f"  [bold green]✓[/bold green] Installed [magenta]{self.name}[/magenta]"
-        )
+        cons.print(f"  [bold green]✓[/bold green] Installed [magenta]{self.name}[/magenta]")
         cons.print(no_indent=True)
 
 
 #                         name             flags                       isDep  isDef  isReq  dependencies                        run order
-FFTW = MFCTarget(
-    "fftw",
-    ["-DMFC_FFTW=ON"],
-    True,
-    False,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    -1,
-)
-HDF5 = MFCTarget(
-    "hdf5",
-    ["-DMFC_HDF5=ON"],
-    True,
-    False,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    -1,
-)
-SILO = MFCTarget(
-    "silo",
-    ["-DMFC_SILO=ON"],
-    True,
-    False,
-    False,
-    MFCTarget.Dependencies([HDF5], [], []),
-    -1,
-)
-LAPACK = MFCTarget(
-    "lapack",
-    ["-DMFC_LAPACK=ON"],
-    True,
-    False,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    -1,
-)
-HIPFORT = MFCTarget(
-    "hipfort",
-    ["-DMFC_HIPFORT=ON"],
-    True,
-    False,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    -1,
-)
-PRE_PROCESS = MFCTarget(
-    "pre_process",
-    ["-DMFC_PRE_PROCESS=ON"],
-    False,
-    True,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    0,
-)
-SIMULATION = MFCTarget(
-    "simulation",
-    ["-DMFC_SIMULATION=ON"],
-    False,
-    True,
-    False,
-    MFCTarget.Dependencies([], [FFTW], [HIPFORT]),
-    1,
-)
-POST_PROCESS = MFCTarget(
-    "post_process",
-    ["-DMFC_POST_PROCESS=ON"],
-    False,
-    True,
-    False,
-    MFCTarget.Dependencies([FFTW, HDF5, SILO, LAPACK], [], []),
-    2,
-)
-SYSCHECK = MFCTarget(
-    "syscheck",
-    ["-DMFC_SYSCHECK=ON"],
-    False,
-    False,
-    True,
-    MFCTarget.Dependencies([], [], [HIPFORT]),
-    -1,
-)
-DOCUMENTATION = MFCTarget(
-    "documentation",
-    ["-DMFC_DOCUMENTATION=ON"],
-    False,
-    False,
-    False,
-    MFCTarget.Dependencies([], [], []),
-    -1,
-)
+FFTW = MFCTarget("fftw", ["-DMFC_FFTW=ON"], True, False, False, MFCTarget.Dependencies([], [], []), -1)
+HDF5 = MFCTarget("hdf5", ["-DMFC_HDF5=ON"], True, False, False, MFCTarget.Dependencies([], [], []), -1)
+SILO = MFCTarget("silo", ["-DMFC_SILO=ON"], True, False, False, MFCTarget.Dependencies([HDF5], [], []), -1)
+LAPACK = MFCTarget("lapack", ["-DMFC_LAPACK=ON"], True, False, False, MFCTarget.Dependencies([], [], []), -1)
+HIPFORT = MFCTarget("hipfort", ["-DMFC_HIPFORT=ON"], True, False, False, MFCTarget.Dependencies([], [], []), -1)
+PRE_PROCESS = MFCTarget("pre_process", ["-DMFC_PRE_PROCESS=ON"], False, True, False, MFCTarget.Dependencies([], [], []), 0)
+SIMULATION = MFCTarget("simulation", ["-DMFC_SIMULATION=ON"], False, True, False, MFCTarget.Dependencies([], [FFTW], [HIPFORT]), 1)
+POST_PROCESS = MFCTarget("post_process", ["-DMFC_POST_PROCESS=ON"], False, True, False, MFCTarget.Dependencies([FFTW, HDF5, SILO, LAPACK], [], []), 2)
+SYSCHECK = MFCTarget("syscheck", ["-DMFC_SYSCHECK=ON"], False, False, True, MFCTarget.Dependencies([], [], [HIPFORT]), -1)
+DOCUMENTATION = MFCTarget("documentation", ["-DMFC_DOCUMENTATION=ON"], False, False, False, MFCTarget.Dependencies([], [], []), -1)
 
-TARGETS = {
-    FFTW,
-    HDF5,
-    SILO,
-    LAPACK,
-    HIPFORT,
-    PRE_PROCESS,
-    SIMULATION,
-    POST_PROCESS,
-    SYSCHECK,
-    DOCUMENTATION,
-}
+TARGETS = {FFTW, HDF5, SILO, LAPACK, HIPFORT, PRE_PROCESS, SIMULATION, POST_PROCESS, SYSCHECK, DOCUMENTATION}
 
 DEFAULT_TARGETS = {target for target in TARGETS if target.isDefault}
 REQUIRED_TARGETS = {target for target in TARGETS if target.isRequired}
@@ -734,17 +537,11 @@ def get_target(target: typing.Union[str, MFCTarget]) -> MFCTarget:
     raise MFCException(f"Target '{target}' does not exist.")
 
 
-def get_targets(
-    targets: typing.List[typing.Union[str, MFCTarget]],
-) -> typing.List[MFCTarget]:
+def get_targets(targets: typing.List[typing.Union[str, MFCTarget]]) -> typing.List[MFCTarget]:
     return [get_target(t) for t in targets]
 
 
-def __build_target(
-    target: typing.Union[MFCTarget, str],
-    case: input.MFCInputFile,
-    history: typing.Set[str] = None,
-):
+def __build_target(target: typing.Union[MFCTarget, str], case: input.MFCInputFile, history: typing.Set[str] = None):
     if history is None:
         history = set()
 
@@ -776,23 +573,16 @@ def get_configured_targets(case: input.MFCInputFile) -> typing.List[MFCTarget]:
 
 
 def __generate_header(case: input.MFCInputFile, targets: typing.List):
-    feature_flags = [
-        "Build",
-        format_list_to_string([t.name for t in get_targets(targets)], "magenta"),
-    ]
+    feature_flags = ["Build", format_list_to_string([t.name for t in get_targets(targets)], "magenta")]
     if ARG("case_optimization"):
         feature_flags.append(f"Case Optimized: [magenta]{ARG('input')}[/magenta]")
     if case.params.get("chemistry", "F") == "T":
-        feature_flags.append(
-            f"Chemistry: [magenta]{case.get_cantera_solution().source}[/magenta]"
-        )
+        feature_flags.append(f"Chemistry: [magenta]{case.get_cantera_solution().source}[/magenta]")
 
     return f"[bold]{' | '.join(feature_flags or ['Generic'])}[/bold]"
 
 
-def build(
-    targets=None, case: input.MFCInputFile = None, history: typing.Set[str] = None
-):
+def build(targets=None, case: input.MFCInputFile = None, history: typing.Set[str] = None):
     if history is None:
         history = set()
     if isinstance(targets, (MFCTarget, str)):

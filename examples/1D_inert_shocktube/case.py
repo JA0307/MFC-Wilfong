@@ -7,9 +7,7 @@ import json
 
 import cantera as ct
 
-parser = argparse.ArgumentParser(
-    prog="nD_inert_shocktube", formatter_class=argparse.ArgumentDefaultsHelpFormatter
-)
+parser = argparse.ArgumentParser(prog="nD_inert_shocktube", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument(
     "--mfc",

@@ -52,17 +52,7 @@ SLUG_NAME_OVERRIDE = {
 }
 
 # Display order and colors for organizations
-ORG_ORDER = [
-    "ORNL",
-    "LLNL",
-    "ACCESS",
-    "Georgia Tech",
-    "Caltech",
-    "Brown",
-    "DoD",
-    "Florida",
-    "CSCS",
-]
+ORG_ORDER = ["ORNL", "LLNL", "ACCESS", "Georgia Tech", "Caltech", "Brown", "DoD", "Florida", "CSCS"]
 ORG_COLORS = {
     "ORNL": "yellow",
     "LLNL": "yellow",
@@ -107,10 +97,7 @@ def _parse_modules_file():
                         # Determine organization from name
                         org = "Other"
                         for prefix, org_name in CLUSTER_ORGS.items():
-                            if (
-                                prefix in full_name
-                                or full_name.lower() == prefix.lower()
-                            ):
+                            if prefix in full_name or full_name.lower() == prefix.lower():
                                 org = org_name
                                 break
 
@@ -154,25 +141,16 @@ def _generate_clusters_content():
         if not org_clusters.get(org):
             continue
         # Format: "  [yellow]ORG:[/yellow]  [cyan]slug[/cyan]=Name  [cyan]slug2[/cyan]=Name2"
-        entries = [
-            f"[cyan]{slug}[/cyan]={_get_cluster_short_name(slug, name)}"
-            for slug, name in org_clusters[org]
-        ]
+        entries = [f"[cyan]{slug}[/cyan]={_get_cluster_short_name(slug, name)}" for slug, name in org_clusters[org]]
         color = ORG_COLORS.get(org, "yellow")
         cluster_lines.append(f"  [{color}]{org}:[/{color}]    " + "  ".join(entries))
 
     # Handle "Other" if any
     if org_clusters.get("Other"):
-        entries = [
-            f"[cyan]{slug}[/cyan]={name}" for slug, name in org_clusters["Other"]
-        ]
+        entries = [f"[cyan]{slug}[/cyan]={name}" for slug, name in org_clusters["Other"]]
         cluster_lines.append("  [yellow]Other:[/yellow]    " + "  ".join(entries))
 
-    cluster_list = (
-        "\n".join(cluster_lines)
-        if cluster_lines
-        else "  [dim]No clusters found in modules file[/dim]"
-    )
+    cluster_list = "\n".join(cluster_lines) if cluster_lines else "  [dim]No clusters found in modules file[/dim]"
 
     # Return full help content with dynamic cluster list
     return f"""\
@@ -210,10 +188,7 @@ MARKDOWN_HELP_FILES = {
     "debugging": ("docs/documentation/troubleshooting.md", None),  # Full file
     "gpu": ("docs/documentation/running.md", "Running on GPUs"),  # Section only
     "batch": ("docs/documentation/running.md", "Batch Execution"),  # Section only
-    "performance": (
-        "docs/documentation/expectedPerformance.md",
-        "Achieving Maximum Performance",
-    ),
+    "performance": ("docs/documentation/expectedPerformance.md", "Achieving Maximum Performance"),
 }
 
 
@@ -358,23 +333,14 @@ def print_topic_help(topic: str):
         cons.raw.print(Markdown(content))
     else:
         # Render as Rich markup in a panel
-        cons.raw.print(
-            Panel(
-                content,
-                title=f"[bold]{topic_info['title']}[/bold]",
-                box=box.ROUNDED,
-                padding=(1, 2),
-            )
-        )
+        cons.raw.print(Panel(content, title=f"[bold]{topic_info['title']}[/bold]", box=box.ROUNDED, padding=(1, 2)))
     cons.print()
 
 
 def print_help_topics():
     """Print list of available help topics."""
     cons.print()
-    cons.raw.print(
-        Panel("[bold cyan]MFC Help System[/bold cyan]", box=box.ROUNDED, padding=(0, 2))
-    )
+    cons.raw.print(Panel("[bold cyan]MFC Help System[/bold cyan]", box=box.ROUNDED, padding=(0, 2)))
     cons.print()
 
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
@@ -435,9 +401,7 @@ def print_help():
     cons.print()
 
     # Quick start - single line
-    cons.print(
-        "[bold]Quick start:[/bold] [cyan]./mfc.sh new my_case[/cyan] → edit case.py → [cyan]./mfc.sh build[/cyan] → [cyan]./mfc.sh run[/cyan]"
-    )
+    cons.print("[bold]Quick start:[/bold] [cyan]./mfc.sh new my_case[/cyan] → edit case.py → [cyan]./mfc.sh build[/cyan] → [cyan]./mfc.sh run[/cyan]")
 
     # Footer
     cons.print("[dim]Run ./mfc.sh <command> --help for options[/dim]")
@@ -456,13 +420,7 @@ def print_command_help(command: str, show_argparse: bool = True):
 
     # Header panel
     cons.print()
-    cons.raw.print(
-        Panel(
-            f"[bold cyan]{command}[/bold cyan]{alias_str}\n[dim]{cmd['description']}[/dim]",
-            box=box.ROUNDED,
-            padding=(0, 2),
-        )
-    )
+    cons.raw.print(Panel(f"[bold cyan]{command}[/bold cyan]{alias_str}\n[dim]{cmd['description']}[/dim]", box=box.ROUNDED, padding=(0, 2)))
     cons.print()
 
     # Examples
@@ -522,9 +480,7 @@ class Tips:
             msg += "  Run [green]./mfc.sh validate <case.py>[/green] to check your case file for errors"
 
         cons.print()
-        cons.raw.print(
-            Panel(msg, box=box.ROUNDED, border_style="yellow", padding=(0, 2))
-        )
+        cons.raw.print(Panel(msg, box=box.ROUNDED, border_style="yellow", padding=(0, 2)))
 
     @staticmethod
     def after_test_failure(failed_uuids: list = None):
@@ -543,11 +499,7 @@ class Tips:
                 lines.append(f"    [red]•[/red] {uuid}")
 
         cons.print()
-        cons.raw.print(
-            Panel(
-                "\n".join(lines), box=box.ROUNDED, border_style="yellow", padding=(0, 2)
-            )
-        )
+        cons.raw.print(Panel("\n".join(lines), box=box.ROUNDED, border_style="yellow", padding=(0, 2)))
 
     @staticmethod
     def after_run_failure():
@@ -570,9 +522,7 @@ class Tips:
     def suggest_validate():
         """Generic suggestion to use validate."""
         cons.print()
-        cons.print(
-            "[dim]Tip: Run [cyan]./mfc.sh validate case.py[/cyan] to check for errors before running[/dim]"
-        )
+        cons.print("[dim]Tip: Run [cyan]./mfc.sh validate case.py[/cyan] to check for errors before running[/dim]")
 
 
 # ONBOARDING FOR NEW USERS
@@ -621,13 +571,7 @@ def interactive_mode():
 
     while True:
         cons.print()
-        cons.raw.print(
-            Panel(
-                "[bold cyan]MFC Interactive Mode[/bold cyan]",
-                box=box.ROUNDED,
-                padding=(0, 2),
-            )
-        )
+        cons.raw.print(Panel("[bold cyan]MFC Interactive Mode[/bold cyan]", box=box.ROUNDED, padding=(0, 2)))
         cons.print()
 
         # Menu options
@@ -649,11 +593,7 @@ def interactive_mode():
                 cons.print(f"  [green]{key}[/green]) {label}")
 
         cons.print()
-        choice = Prompt.ask(
-            "[bold]Select an option[/bold]",
-            choices=[o[0] for o in options],
-            default="q",
-        )
+        choice = Prompt.ask("[bold]Select an option[/bold]", choices=[o[0] for o in options], default="q")
 
         if choice == "q":
             cons.print("[dim]Goodbye![/dim]")
@@ -701,9 +641,7 @@ def _interactive_new():
     cons.print()
 
     # Show templates
-    cons.print(
-        "Available templates: [cyan]1D_minimal[/cyan], [cyan]2D_minimal[/cyan], [cyan]3D_minimal[/cyan]"
-    )
+    cons.print("Available templates: [cyan]1D_minimal[/cyan], [cyan]2D_minimal[/cyan], [cyan]3D_minimal[/cyan]")
     cons.print("[dim]Or use 'example:<name>' to copy from examples[/dim]")
     cons.print()
 
@@ -764,11 +702,7 @@ def _interactive_clean():
     cons.print("[bold]Clean Build Files[/bold]")
     cons.print()
 
-    confirm = Prompt.ask(
-        "Are you sure you want to clean all build files?",
-        choices=["y", "n"],
-        default="n",
-    )
+    confirm = Prompt.ask("Are you sure you want to clean all build files?", choices=["y", "n"], default="n")
 
     if confirm == "y":
         _run_mfc_command(["./mfc.sh", "clean"])

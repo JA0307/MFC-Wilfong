@@ -60,9 +60,7 @@ class Argument:
     type: Optional[type] = None  # str, int, float, etc.
     default: Any = None
     choices: Optional[List[Any]] = None
-    nargs: Optional[Union[str, int]] = (
-        None  # "+", "*", "?", int, or "..." for REMAINDER
-    )
+    nargs: Optional[Union[str, int]] = None  # "+", "*", "?", int, or "..." for REMAINDER
     metavar: Optional[str] = None
     required: bool = False
     dest: Optional[str] = None  # Override destination name
@@ -144,9 +142,7 @@ class Command:
     # Documentation
     description: Optional[str] = None  # Long description for docs
     examples: List[Example] = field(default_factory=list)
-    key_options: List[tuple] = field(
-        default_factory=list
-    )  # (option, description) pairs
+    key_options: List[tuple] = field(default_factory=list)  # (option, description) pairs
 
     # Handler module path (for dispatch)
     handler: Optional[str] = None  # Module.function path

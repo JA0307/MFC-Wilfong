@@ -52,9 +52,7 @@ def _load_case_optimization_params():
     """Get params that can be hard-coded for GPU optimization."""
     from ..params import REGISTRY
 
-    return [
-        name for name, param in REGISTRY.all_params.items() if param.case_optimization
-    ]
+    return [name for name, param in REGISTRY.all_params.items() if param.case_optimization]
 
 
 def _build_schema():
@@ -155,9 +153,7 @@ def get_input_dict_keys(target_name: str):
     Returns:
         Set-like object supporting ``in`` operator
     """
-    filter_case_opt = (
-        ARG("case_optimization", dflt=False) and target_name == "simulation"
-    )
+    filter_case_opt = ARG("case_optimization", dflt=False) and target_name == "simulation"
     return _TargetKeySet(target_name, filter_case_opt)
 
 

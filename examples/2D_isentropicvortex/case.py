@@ -1,4 +1,5 @@
 import json
+import math
 
 # Parameters
 epsilon = "5d0"
@@ -13,14 +14,8 @@ alpha_rho1_i = "1d0"
 pres_i = "1d0"
 
 # Perturbations
-vel1 = (
-    f"{vel1_i} + (y - yc)*({epsilon}/(2d0*pi))*"
-    + f"exp({alpha}*(1d0 - (x - xc)**2d0 - (y - yc)**2d0))"
-)
-vel2 = (
-    f"{vel2_i} - (x - xc)*({epsilon}/(2d0*pi))*"
-    + f"exp({alpha}*(1d0 - (x - xc)**2d0 - (y - yc)**2d0))"
-)
+vel1 = f"{vel1_i} + (y - yc)*({epsilon}/(2d0*pi))*" + f"exp({alpha}*(1d0 - (x - xc)**2d0 - (y - yc)**2d0))"
+vel2 = f"{vel2_i} - (x - xc)*({epsilon}/(2d0*pi))*" + f"exp({alpha}*(1d0 - (x - xc)**2d0 - (y - yc)**2d0))"
 alpha_rho1 = (
     f"{alpha_rho1_i}*(1d0 - ({alpha_rho1_i}/{pres_i})*({epsilon}/(2d0*pi))*"
     + f"({epsilon}/(8d0*{alpha}*({gamma} + 1d0)*pi))*"

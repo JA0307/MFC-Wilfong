@@ -5,6 +5,7 @@
 # relative error.
 
 import json
+import math
 
 l = 1
 eps = 1e-6

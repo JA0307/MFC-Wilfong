@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 
 # Domain parameters
 D = 2.5  # Jet diameter

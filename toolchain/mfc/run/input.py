@@ -65,9 +65,7 @@ class MFCInputFile(Case):
             except Exception:
                 continue
 
-        raise common.MFCException(
-            f"Cantera file '{cantera_file}' not found. Searched: {', '.join(candidates)}."
-        )
+        raise common.MFCException(f"Cantera file '{cantera_file}' not found. Searched: {', '.join(candidates)}.")
 
     def generate_fpp(self, target) -> None:
         # Lazy import to avoid slow startup for commands that don't need chemistry
@@ -83,9 +81,7 @@ class MFCInputFile(Case):
         self.__save_fpp(target, self.get_fpp(target))
 
         # (Thermo)Chemistry source file
-        modules_dir = os.path.join(
-            target.get_staging_dirpath(self), "modules", target.name
-        )
+        modules_dir = os.path.join(target.get_staging_dirpath(self), "modules", target.name)
         common.create_directory(modules_dir)
 
         # Determine the real type based on the single precision flag
@@ -101,13 +97,7 @@ class MFCInputFile(Case):
         # Write the generated Fortran code to the m_thermochem.f90 file with the chosen precision
         sol = self.get_cantera_solution()
 
-        thermochem_code = pyro.FortranCodeGenerator().generate(
-            "m_thermochem",
-            sol,
-            pyro.CodeGenerationOptions(
-                scalar_type=real_type, directive_offload=directive_str
-            ),
-        )
+        thermochem_code = pyro.FortranCodeGenerator().generate("m_thermochem", sol, pyro.CodeGenerationOptions(scalar_type=real_type, directive_offload=directive_str))
 
         # CCE 19.0.0 workaround: pyrometheus generates !DIR$ INLINEALWAYS for Cray+ACC
         # but omits !$acc routine seq, so thermochem routines are not registered as
@@ -133,9 +123,7 @@ class MFCInputFile(Case):
                 )
             thermochem_code = patched
 
-        common.file_write(
-            os.path.join(modules_dir, "m_thermochem.f90"), thermochem_code, True
-        )
+        common.file_write(os.path.join(modules_dir, "m_thermochem.f90"), thermochem_code, True)
 
         cons.unindent()
 
@@ -149,9 +137,7 @@ class MFCInputFile(Case):
         try:
             warnings = case_validator.validate_case_constraints(self.params, stage)
         except case_validator.CaseConstraintError as e:
-            raise common.MFCException(
-                f"Case validation failed for {stage}:\n{e}"
-            ) from e
+            raise common.MFCException(f"Case validation failed for {stage}:\n{e}") from e
 
         if warnings:
             cons.print()
@@ -176,34 +162,16 @@ class MFCInputFile(Case):
         files = set()
         dirs = set()
 
-        files = set(
-            [
-                "equations.dat",
-                "run_time.inf",
-                "time_data.dat",
-                "io_time_data.dat",
-                "fort.1",
-                "pre_time_data.dat",
-            ]
-            + [f"{target.name}.inp" for target in targets]
-        )
+        files = set(["equations.dat", "run_time.inf", "time_data.dat", "io_time_data.dat", "fort.1", "pre_time_data.dat"] + [f"{target.name}.inp" for target in targets])
 
         if build.PRE_PROCESS in targets:
-            files = files | set(
-                glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat"))
-            )
+            files = files | set(glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat")))
             dirs = dirs | set(glob.glob(os.path.join(self.dirpath, "p_all", "p*", "0")))
 
         if build.SIMULATION in targets:
-            restarts = set(
-                glob.glob(os.path.join(self.dirpath, "restart_data", "*.dat"))
-            )
-            restarts = restarts - set(
-                glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_0.dat"))
-            )
-            restarts = restarts - set(
-                glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_*_cb.dat"))
-            )
+            restarts = set(glob.glob(os.path.join(self.dirpath, "restart_data", "*.dat")))
+            restarts = restarts - set(glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_0.dat")))
+            restarts = restarts - set(glob.glob(os.path.join(self.dirpath, "restart_data", "lustre_*_cb.dat")))
 
             Ds = set(glob.glob(os.path.join(self.dirpath, "D", "*.dat")))
             Ds = Ds - set(glob.glob(os.path.join(self.dirpath, "D", "*.000000.dat")))
@@ -215,27 +183,16 @@ class MFCInputFile(Case):
             dirs.add("silo_hdf5")
 
         for relfile in files:
-            filepath = (
-                relfile
-                if os.path.isfile(relfile)
-                else os.path.join(self.dirpath, relfile)
-            )
+            filepath = relfile if os.path.isfile(relfile) else os.path.join(self.dirpath, relfile)
             common.delete_file(filepath)
 
         for reldir in dirs:
-            dirpath = (
-                reldir if os.path.isdir(reldir) else os.path.join(self.dirpath, reldir)
-            )
+            dirpath = reldir if os.path.isdir(reldir) else os.path.join(self.dirpath, reldir)
             common.delete_directory(dirpath)
 
 
 # Load the input file
-def load(
-    filepath: str = None,
-    args: typing.List[str] = None,
-    empty_data: dict = None,
-    do_print: bool = True,
-) -> MFCInputFile:
+def load(filepath: str = None, args: typing.List[str] = None, empty_data: dict = None, do_print: bool = True) -> MFCInputFile:
     if not filepath:
         if empty_data is None:
             raise common.MFCException("Please provide an input file.")
@@ -253,19 +210,13 @@ def load(
     dictionary: dict = {}
 
     if not os.path.exists(filename):
-        raise common.MFCException(
-            f"Input file '{filename}' does not exist. Please check the path is valid."
-        )
+        raise common.MFCException(f"Input file '{filename}' does not exist. Please check the path is valid.")
 
     if filename.endswith(".py"):
-        (json_str, err) = common.get_py_program_output(
-            filename, ["--mfc", json.dumps(ARGS())] + (args or [])
-        )
+        (json_str, err) = common.get_py_program_output(filename, ["--mfc", json.dumps(ARGS())] + (args or []))
 
         if err != 0:
-            raise common.MFCException(
-                f"Input file {filename} terminated with a non-zero exit code. Please make sure running the file doesn't produce any errors."
-            )
+            raise common.MFCException(f"Input file {filename} terminated with a non-zero exit code. Please make sure running the file doesn't produce any errors.")
     elif filename.endswith(".json"):
         json_str = common.file_read(filename)
     elif filename.endswith((".yaml", ".yml")):
@@ -275,16 +226,12 @@ def load(
             dictionary = yaml.safe_load(f)
         json_str = json.dumps(dictionary)
     else:
-        raise common.MFCException(
-            "Unrecognized input file format. Supported: .py, .json, .yaml, .yml. Please check the README and sample cases in the examples directory."
-        )
+        raise common.MFCException("Unrecognized input file format. Supported: .py, .json, .yaml, .yml. Please check the README and sample cases in the examples directory.")
 
     try:
         dictionary = json.loads(json_str)
     except Exception as exc:
-        raise common.MFCException(
-            f"Input file {filename} did not produce valid JSON. It should only print the case dictionary.\n\n{exc}\n"
-        )
+        raise common.MFCException(f"Input file {filename} did not produce valid JSON. It should only print the case dictionary.\n\n{exc}\n")
 
     input_file = MFCInputFile(filename, dirpath, dictionary)
     input_file.validate_params(f"Input file {filename}")

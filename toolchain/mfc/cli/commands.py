@@ -11,52 +11,15 @@ When adding a new command or option, ONLY modify this file.
 Then run `./mfc.sh generate` to update completions.
 """
 
-from .schema import (
-    ArgAction,
-    Argument,
-    CLISchema,
-    Command,
-    CommonArgumentSet,
-    Completion,
-    CompletionType,
-    Example,
-    MutuallyExclusiveGroup,
-    Positional,
-)
+from .schema import ArgAction, Argument, CLISchema, Command, CommonArgumentSet, Completion, CompletionType, Example, MutuallyExclusiveGroup, Positional
 
 # CONSTANTS (shared with other modules)
 
-TARGET_NAMES = [
-    "fftw",
-    "hdf5",
-    "silo",
-    "lapack",
-    "hipfort",
-    "pre_process",
-    "simulation",
-    "post_process",
-    "syscheck",
-    "documentation",
-]
+TARGET_NAMES = ["fftw", "hdf5", "silo", "lapack", "hipfort", "pre_process", "simulation", "post_process", "syscheck", "documentation"]
 
 DEFAULT_TARGET_NAMES = ["pre_process", "simulation", "post_process"]
 
-TEMPLATE_NAMES = [
-    "bridges2",
-    "carpenter",
-    "carpenter-cray",
-    "default",
-    "delta",
-    "deltaai",
-    "frontier",
-    "hipergator",
-    "nautilus",
-    "oscar",
-    "phoenix",
-    "phoenix-bench",
-    "santis",
-    "tuo",
-]
+TEMPLATE_NAMES = ["bridges2", "carpenter", "carpenter-cray", "default", "delta", "deltaai", "frontier", "hipergator", "nautilus", "oscar", "phoenix", "phoenix-bench", "santis", "tuo"]
 
 GPU_OPTIONS = ["acc", "mp"]
 
@@ -176,10 +139,7 @@ BUILD_COMMAND = Command(
         Example("./mfc.sh build", "Build all default targets (CPU)"),
         Example("./mfc.sh build -j 8", "Build with 8 parallel jobs"),
         Example("./mfc.sh build --gpu", "Build with GPU (OpenACC) support"),
-        Example(
-            "./mfc.sh build -i case.py --case-optimization -j 8",
-            "Case optimization (10x faster!)",
-        ),
+        Example("./mfc.sh build -i case.py --case-optimization -j 8", "Case optimization (10x faster!)"),
     ],
     key_options=[
         ("-j, --jobs N", "Number of parallel build jobs"),
@@ -364,14 +324,8 @@ RUN_COMMAND = Command(
     examples=[
         Example("./mfc.sh run case.py", "Run interactively with 1 rank"),
         Example("./mfc.sh run case.py -n 4", "Run with 4 MPI ranks"),
-        Example(
-            "./mfc.sh run case.py --case-optimization -j 8",
-            "10x faster with case optimization!",
-        ),
-        Example(
-            "./mfc.sh run case.py -e batch -N 2 -n 4",
-            "Submit batch job: 2 nodes, 4 ranks/node",
-        ),
+        Example("./mfc.sh run case.py --case-optimization -j 8", "10x faster with case optimization!"),
+        Example("./mfc.sh run case.py -e batch -N 2 -n 4", "Submit batch job: 2 nodes, 4 ranks/node"),
     ],
     key_options=[
         ("--case-optimization", "Hard-code params for 10x speedup!"),
@@ -537,13 +491,8 @@ TEST_COMMAND = Command(
         Example("./mfc.sh test -j 4", "Run with 4 parallel jobs"),
         Example("./mfc.sh test --only 3D", "Run only 3D tests"),
         Example("./mfc.sh test --generate", "Regenerate golden files"),
-        Example(
-            "./mfc.sh test --only-changes -j 4", "Run tests affected by changed files"
-        ),
-        Example(
-            "./mfc.sh build --gcov -j 8 && ./mfc.sh test --build-coverage-cache",
-            "One-time: build file-coverage cache",
-        ),
+        Example("./mfc.sh test --only-changes -j 4", "Run tests affected by changed files"),
+        Example("./mfc.sh build --gcov -j 8 && ./mfc.sh test --build-coverage-cache", "One-time: build file-coverage cache"),
     ],
     key_options=[
         ("-j, --jobs N", "Number of parallel test jobs"),
@@ -624,9 +573,7 @@ NEW_COMMAND = Command(
     examples=[
         Example("./mfc.sh new my_case", "Create with 1D_minimal template"),
         Example("./mfc.sh new my_case -t 2D_minimal", "Create with 2D template"),
-        Example(
-            "./mfc.sh new my_case -t example:3D_sphbubcollapse", "Copy from example"
-        ),
+        Example("./mfc.sh new my_case -t example:3D_sphbubcollapse", "Copy from example"),
         Example("./mfc.sh new --list", "List available templates"),
     ],
     key_options=[
@@ -731,9 +678,7 @@ COMPLETION_COMMAND = Command(
         ),
     ],
     examples=[
-        Example(
-            "./mfc.sh completion install", "Install tab completion for current shell"
-        ),
+        Example("./mfc.sh completion install", "Install tab completion for current shell"),
         Example("./mfc.sh completion install bash", "Install for bash specifically"),
         Example("./mfc.sh completion status", "Check completion installation status"),
     ],
@@ -868,9 +813,7 @@ GENERATE_COMMAND = Command(
     examples=[
         Example("./mfc.sh generate", "Regenerate completion scripts"),
         Example("./mfc.sh generate --check", "Check if completions are up to date"),
-        Example(
-            "./mfc.sh generate --json-schema", "Generate JSON Schema for IDE support"
-        ),
+        Example("./mfc.sh generate --json-schema", "Generate JSON Schema for IDE support"),
     ],
 )
 
@@ -992,9 +935,7 @@ VIZ_COMMAND = Command(
             type=str,
             default=None,
             choices=["binary", "silo"],
-            completion=Completion(
-                type=CompletionType.CHOICES, choices=["binary", "silo"]
-            ),
+            completion=Completion(type=CompletionType.CHOICES, choices=["binary", "silo"]),
         ),
         Argument(
             name="output",
@@ -1189,9 +1130,7 @@ VIZ_COMMAND = Command(
         Argument(
             name="interactive",
             short="i",
-            help=(
-                "Launch an interactive Dash web UI in your browser. Loads all timesteps (or the set given by --step) and lets you scrub through them and switch variables live."
-            ),
+            help=("Launch an interactive Dash web UI in your browser. Loads all timesteps (or the set given by --step) and lets you scrub through them and switch variables live."),
             action=ArgAction.STORE_TRUE,
             default=False,
         ),
@@ -1210,9 +1149,7 @@ VIZ_COMMAND = Command(
         ),
         Argument(
             name="png",
-            help=(
-                "Save PNG image(s) to the output directory instead of launching the terminal UI."
-            ),
+            help=("Save PNG image(s) to the output directory instead of launching the terminal UI."),
             action=ArgAction.STORE_TRUE,
             default=False,
         ),
@@ -1220,30 +1157,12 @@ VIZ_COMMAND = Command(
     examples=[
         Example("./mfc.sh viz case_dir/", "Launch terminal UI (default mode)"),
         Example("./mfc.sh viz case_dir/ --list-steps", "Discover available timesteps"),
-        Example(
-            "./mfc.sh viz case_dir/ --list-vars --step 0",
-            "Discover available variables at step 0",
-        ),
-        Example(
-            "./mfc.sh viz case_dir/ --var pres --interactive",
-            "Browser UI — scrub timesteps and switch vars",
-        ),
-        Example(
-            "./mfc.sh viz case_dir/ --var pres --step 1000 --png",
-            "Save pressure PNG at step 1000",
-        ),
-        Example(
-            "./mfc.sh viz case_dir/ --var pres --step 0:10000:500 --mp4",
-            "Encode pressure MP4 from range",
-        ),
-        Example(
-            "./mfc.sh viz case_dir/ --step 0,100,200,...,1000 --png",
-            "Render all steps 0–1000 as images",
-        ),
-        Example(
-            "./mfc.sh viz case_dir/ --var pres --step 500 --slice-axis x --png",
-            "3D: x-plane slice of pressure",
-        ),
+        Example("./mfc.sh viz case_dir/ --list-vars --step 0", "Discover available variables at step 0"),
+        Example("./mfc.sh viz case_dir/ --var pres --interactive", "Browser UI — scrub timesteps and switch vars"),
+        Example("./mfc.sh viz case_dir/ --var pres --step 1000 --png", "Save pressure PNG at step 1000"),
+        Example("./mfc.sh viz case_dir/ --var pres --step 0:10000:500 --mp4", "Encode pressure MP4 from range"),
+        Example("./mfc.sh viz case_dir/ --step 0,100,200,...,1000 --png", "Render all steps 0–1000 as images"),
+        Example("./mfc.sh viz case_dir/ --var pres --step 500 --slice-axis x --png", "3D: x-plane slice of pressure"),
     ],
     key_options=[
         ("-- Discovery (all modes) --", ""),

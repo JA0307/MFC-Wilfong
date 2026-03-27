@@ -146,11 +146,7 @@ BASE_CFG = {
 
 
 def trace_to_uuid(trace: str) -> str:
-    return (
-        hex(binascii.crc32(hashlib.sha1(str(trace).encode()).digest()))
-        .upper()[2:]
-        .zfill(8)
-    )
+    return hex(binascii.crc32(hashlib.sha1(str(trace).encode()).digest())).upper()[2:].zfill(8)
 
 
 @dataclasses.dataclass(init=False)
@@ -159,17 +155,13 @@ class TestCase(case.Case):
     trace: str
     override_tol: Optional[float] = None
 
-    def __init__(
-        self, trace: str, mods: dict, ppn: int = None, override_tol: float = None
-    ) -> None:
+    def __init__(self, trace: str, mods: dict, ppn: int = None, override_tol: float = None) -> None:
         self.trace = trace
         self.ppn = ppn or 1
         self.override_tol = override_tol
         super().__init__({**BASE_CFG.copy(), **mods})
 
-    def run(
-        self, targets: List[Union[str, MFCTarget]], gpus: Set[int]
-    ) -> subprocess.CompletedProcess:
+    def run(self, targets: List[Union[str, MFCTarget]], gpus: Set[int]) -> subprocess.CompletedProcess:
         if gpus is not None and len(gpus) != 0:
             gpus_select = ["--gpus"] + [str(_) for _ in gpus]
         else:
@@ -187,27 +179,9 @@ class TestCase(case.Case):
 
         target_names = [get_target(t).name for t in targets]
 
-        command = [
-            mfc_script,
-            "run",
-            filepath,
-            "--no-build",
-            *tasks,
-            *case_optimization,
-            *jobs,
-            "-t",
-            *target_names,
-            *gpus_select,
-            *ARG("--"),
-        ]
+        command = [mfc_script, "run", filepath, "--no-build", *tasks, *case_optimization, *jobs, "-t", *target_names, *gpus_select, *ARG("--")]
 
-        return common.system(
-            command,
-            print_cmd=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
+        return common.system(command, print_cmd=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def get_trace(self) -> str:
         return self.trace
@@ -228,11 +202,7 @@ class TestCase(case.Case):
         dirpath = self.get_dirpath()
 
         exts = ["*.inp", "*.1", "*.dat", "*.inf", "*.sh", "*.txt"]
-        for f in list(
-            itertools.chain.from_iterable(
-                glob.glob(os.path.join(dirpath, ext)) for ext in exts
-            )
-        ):
+        for f in list(itertools.chain.from_iterable(glob.glob(os.path.join(dirpath, ext)) for ext in exts)):
             if "golden" in f:
                 continue
 
@@ -293,11 +263,7 @@ print(json.dumps({{**case, **mods}}))
         return f"tests/[bold magenta]{self.get_uuid()}[/bold magenta]: {self.trace}"
 
     def to_input_file(self) -> input.MFCInputFile:
-        return input.MFCInputFile(
-            os.path.basename(self.get_filepath()),
-            self.get_dirpath(),
-            self.get_parameters(),
-        )
+        return input.MFCInputFile(os.path.basename(self.get_filepath()), self.get_dirpath(), self.get_parameters())
 
     def compute_tolerance(self) -> float:
         if self.override_tol:
@@ -314,10 +280,7 @@ print(json.dumps({{**case, **mods}}))
             tolerance = 1e-7
         elif self.params.get("mixlayer_perturb", "F") == "T":
             tolerance = 1e-7
-        elif any(
-            self.params.get(key, "F") == "T"
-            for key in ["relax", "ib", "qbmm", "bubbles_euler", "bubbles_lagrange"]
-        ):
+        elif any(self.params.get(key, "F") == "T" for key in ["relax", "ib", "qbmm", "bubbles_euler", "bubbles_lagrange"]):
             tolerance = 1e-10
         elif self.params.get("low_Mach") in [1, 2]:
             tolerance = 1e-10
@@ -357,10 +320,7 @@ class TestCaseBuilder:
                 if not isinstance(value, str):
                     continue
 
-                for candidate in [
-                    value,
-                    os.path.join(os.path.dirname(self.path), value),
-                ]:
+                for candidate in [value, os.path.join(os.path.dirname(self.path), value)]:
                     abspath = os.path.abspath(candidate)
                     if os.path.exists(abspath):
                         dictionary[key] = abspath
@@ -393,28 +353,11 @@ class CaseGeneratorStack:
         return (self.mods.pop(), self.trace.pop())
 
 
-def define_case_f(
-    trace: str,
-    path: str,
-    args: List[str] = None,
-    ppn: int = None,
-    mods: dict = None,
-    functor: Callable = None,
-    override_tol: float = None,
-) -> TestCaseBuilder:
-    return TestCaseBuilder(
-        trace, mods or {}, path, args or [], ppn or 1, functor, override_tol
-    )
+def define_case_f(trace: str, path: str, args: List[str] = None, ppn: int = None, mods: dict = None, functor: Callable = None, override_tol: float = None) -> TestCaseBuilder:
+    return TestCaseBuilder(trace, mods or {}, path, args or [], ppn or 1, functor, override_tol)
 
 
-def define_case_d(
-    stack: CaseGeneratorStack,
-    newTrace: str,
-    newMods: dict,
-    ppn: int = None,
-    functor: Callable = None,
-    override_tol: float = None,
-) -> TestCaseBuilder:
+def define_case_d(stack: CaseGeneratorStack, newTrace: str, newMods: dict, ppn: int = None, functor: Callable = None, override_tol: float = None) -> TestCaseBuilder:
     mods: dict = {}
 
     for mod in stack.mods:
@@ -430,9 +373,7 @@ def define_case_d(
         if not common.isspace(trace):
             traces.append(trace)
 
-    return TestCaseBuilder(
-        " -> ".join(traces), mods, None, None, ppn or 1, functor, override_tol
-    )
+    return TestCaseBuilder(" -> ".join(traces), mods, None, None, ppn or 1, functor, override_tol)
 
 
 def input_bubbles_lagrange(self):
@@ -457,9 +398,7 @@ def create_input_lagrange(path_test):
 def copy_input_lagrange(path_example_input, path_test):
     folder_path_dest = path_test + "/input/"
     fite_path_dest = folder_path_dest + "lag_bubbles.dat"
-    file_path_src = (
-        common.MFC_EXAMPLE_DIRPATH + path_example_input + "/input/lag_bubbles.dat"
-    )
+    file_path_src = common.MFC_EXAMPLE_DIRPATH + path_example_input + "/input/lag_bubbles.dat"
     if not os.path.exists(folder_path_dest):
         os.mkdir(folder_path_dest)
 

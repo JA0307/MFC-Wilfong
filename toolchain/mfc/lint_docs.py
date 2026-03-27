@@ -94,9 +94,7 @@ def check_docs(repo_root: Path) -> list[str]:
             # Strip trailing punctuation that may have leaked in
             path_str = path_str.rstrip(".,;:!?")
             if not (repo_root / path_str).exists():
-                errors.append(
-                    f"  {doc} references '{path_str}' but it does not exist. Fix: update the path or remove the reference"
-                )
+                errors.append(f"  {doc} references '{path_str}' but it does not exist. Fix: update the path or remove the reference")
     return errors
 
 
@@ -125,9 +123,7 @@ def check_cite_keys(repo_root: Path) -> list[str]:
         for match in CITE_RE.finditer(text):
             key = match.group(1)
             if key.lower() not in valid_keys:
-                errors.append(
-                    f"  {rel} uses \\cite {key} but no bib entry found. Fix: add entry to docs/references.bib or fix the key"
-                )
+                errors.append(f"  {rel} uses \\cite {key} but no bib entry found. Fix: add entry to docs/references.bib or fix the key")
 
     return errors
 
@@ -222,9 +218,7 @@ def check_param_refs(repo_root: Path) -> list[str]:
             # Normalize %% to % for lookup
             normalized = param.replace("%%", "%")
             if not _is_valid_param(normalized, valid_params, sub_params):
-                errors.append(
-                    f"  {doc_rel} references parameter '{param}' not in REGISTRY. Fix: check spelling or add to definitions.py"
-                )
+                errors.append(f"  {doc_rel} references parameter '{param}' not in REGISTRY. Fix: check spelling or add to definitions.py")
 
     return errors
 
@@ -254,16 +248,12 @@ def check_math_syntax(repo_root: Path) -> list[str]:
             cleaned = re.sub(r"\\f\[.*?\\f\]", "", cleaned)
 
             if "$$" in cleaned:
-                errors.append(
-                    f"  {rel}:{i} uses $$...$$ display math. Fix: replace $$ with \\f[ and \\f]"
-                )
+                errors.append(f"  {rel}:{i} uses $$...$$ display math. Fix: replace $$ with \\f[ and \\f]")
                 continue
 
             for m in re.finditer(r"\$([^$\n]+?)\$", cleaned):
                 if re.search(r"\\[a-zA-Z]", m.group(1)):
-                    errors.append(
-                        f"  {rel}:{i} uses $...$ with LaTeX commands. Fix: replace $ delimiters with \\f$ and \\f$"
-                    )
+                    errors.append(f"  {rel}:{i} uses $...$ with LaTeX commands. Fix: replace $ delimiters with \\f$ and \\f$")
                     break  # one error per line
 
     return errors
@@ -282,11 +272,7 @@ def _gitignored_docs(repo_root: Path) -> set[str]:
             cwd=repo_root,
             check=False,
         )
-        return {
-            Path(f).name
-            for f in result.stdout.splitlines()
-            if f.startswith(str(doc_dir.relative_to(repo_root)))
-        }
+        return {Path(f).name for f in result.stdout.splitlines() if f.startswith(str(doc_dir.relative_to(repo_root)))}
     except FileNotFoundError:
         return set()
 
@@ -326,9 +312,7 @@ def check_section_anchors(repo_root: Path) -> list[str]:
                 continue
             for m in re.finditer(r"\]\(#([\w-]+)\)", line):
                 if m.group(1) not in anchors:
-                    errors.append(
-                        f"  {rel}:{i} links to #{m.group(1)} but no {{#{m.group(1)}}} anchor exists. Fix: add {{#{m.group(1)}}} to the target section header"
-                    )
+                    errors.append(f"  {rel}:{i} links to #{m.group(1)} but no {{#{m.group(1)}}} anchor exists. Fix: add {{#{m.group(1)}}} to the target section header")
 
     return errors
 
@@ -366,9 +350,7 @@ def check_doxygen_percent(repo_root: Path) -> list[str]:
                 span = m.group(1) or m.group(2)
                 if bad_pct_re.search(span):
                     fixed = bad_pct_re.sub("%%", span)
-                    errors.append(
-                        f"  {rel}:{i} Doxygen will eat the % in `{span}`. Fix: `{fixed}`"
-                    )
+                    errors.append(f"  {rel}:{i} Doxygen will eat the % in `{span}`. Fix: `{fixed}`")
 
     return errors
 
@@ -381,15 +363,7 @@ def check_page_refs(repo_root: Path) -> list[str]:
 
     # Collect all @page identifiers (IDs may contain hyphens)
     # Include Doxygen built-ins and auto-generated pages (created by ./mfc.sh generate)
-    page_ids = {
-        "citelist",
-        "parameters",
-        "case_constraints",
-        "physics_constraints",
-        "examples",
-        "cli-reference",
-        "architecture",
-    }
+    page_ids = {"citelist", "parameters", "case_constraints", "physics_constraints", "examples", "cli-reference", "architecture"}
     for md_file in doc_dir.glob("*.md"):
         text = md_file.read_text(encoding="utf-8")
         m = re.search(r"^\s*@page\s+([\w-]+)", text, flags=re.MULTILINE)
@@ -414,9 +388,7 @@ def check_page_refs(repo_root: Path) -> list[str]:
         for match in REF_RE.finditer(text):
             ref_target = match.group(1)
             if ref_target not in page_ids:
-                errors.append(
-                    f"  {rel} uses @ref {ref_target} but no @page with that ID exists. Fix: check the page ID or add @page declaration"
-                )
+                errors.append(f"  {rel} uses @ref {ref_target} but no @page with that ID exists. Fix: check the page ID or add @page declaration")
 
     return errors
 
@@ -491,9 +463,7 @@ def check_physics_docs_coverage(repo_root: Path) -> list[str]:
             continue
         if method in skip:
             continue
-        errors.append(
-            f"  {method} has validation rules but no PHYSICS_DOCS entry. Fix: add entry to PHYSICS_DOCS in case_validator.py or add to skip set in lint_docs.py"
-        )
+        errors.append(f"  {method} has validation rules but no PHYSICS_DOCS entry. Fix: add entry to PHYSICS_DOCS in case_validator.py or add to skip set in lint_docs.py")
 
     return errors
 
@@ -523,15 +493,11 @@ def check_identifier_refs(repo_root: Path) -> list[str]:
             continue
         source_path = repo_root / source_file
         if not source_path.exists():
-            errors.append(
-                f"  contributing.md references `{identifier}` in {source_file} but {source_file} does not exist"
-            )
+            errors.append(f"  contributing.md references `{identifier}` in {source_file} but {source_file} does not exist")
             continue
         source_text = source_path.read_text(encoding="utf-8")
         if identifier not in source_text:
-            errors.append(
-                f"  contributing.md references `{identifier}` but it was not found in {source_file}. Fix: update the docs or the identifier"
-            )
+            errors.append(f"  contributing.md references `{identifier}` but it was not found in {source_file}. Fix: update the docs or the identifier")
 
     return errors
 
@@ -567,9 +533,7 @@ def check_cli_refs(repo_root: Path) -> list[str]:
             seen.add(cmd)
             continue
         seen.add(cmd)
-        errors.append(
-            f"  running.md references './mfc.sh {cmd}' but '{cmd}' is not a known CLI command. Fix: update the command name or remove the reference"
-        )
+        errors.append(f"  running.md references './mfc.sh {cmd}' but '{cmd}' is not a known CLI command. Fix: update the command name or remove the reference")
 
     return errors
 
@@ -601,31 +565,23 @@ def check_unpaired_math(repo_root: Path) -> list[str]:
             # Count \f$ occurrences (should be even per line for inline math)
             inline_count = len(re.findall(r"\\f\$", line))
             if inline_count % 2 != 0:
-                errors.append(
-                    f"  {rel}:{i} has {inline_count} \\f$ delimiter(s) (odd). Fix: ensure every \\f$ has a matching closing \\f$"
-                )
+                errors.append(f"  {rel}:{i} has {inline_count} \\f$ delimiter(s) (odd). Fix: ensure every \\f$ has a matching closing \\f$")
 
             # Track \f[ / \f] balance
             opens = len(re.findall(r"\\f\[", line))
             closes = len(re.findall(r"\\f\]", line))
             for _ in range(opens):
                 if display_math_open:
-                    errors.append(
-                        f"  {rel}:{i} opens \\f[ but previous \\f[ from line {display_math_open} is still open. Fix: add missing \\f]"
-                    )
+                    errors.append(f"  {rel}:{i} opens \\f[ but previous \\f[ from line {display_math_open} is still open. Fix: add missing \\f]")
                 display_math_open = i
             for _ in range(closes):
                 if not display_math_open:
-                    errors.append(
-                        f"  {rel}:{i} has \\f] without a preceding \\f[. Fix: add missing \\f[ or remove extra \\f]"
-                    )
+                    errors.append(f"  {rel}:{i} has \\f] without a preceding \\f[. Fix: add missing \\f[ or remove extra \\f]")
                 else:
                     display_math_open = 0
 
         if display_math_open:
-            errors.append(
-                f"  {rel}:{display_math_open} opens \\f[ that is never closed. Fix: add \\f] to close the display math block"
-            )
+            errors.append(f"  {rel}:{display_math_open} opens \\f[ that is never closed. Fix: add \\f] to close the display math block")
 
     return errors
 
@@ -706,9 +662,7 @@ def check_doxygen_commands_in_backticks(repo_root: Path) -> list[str]:
                 cmd_match = doxy_cmd_re.search(span)
                 if cmd_match:
                     cmd = cmd_match.group(0)
-                    errors.append(
-                        f"  {rel}:{i} backtick span contains Doxygen command '{cmd}' which may be processed. Fix: use a fenced code block or rephrase"
-                    )
+                    errors.append(f"  {rel}:{i} backtick span contains Doxygen command '{cmd}' which may be processed. Fix: use a fenced code block or rephrase")
 
     return errors
 
@@ -743,9 +697,7 @@ def check_single_quote_in_backtick(repo_root: Path) -> list[str]:
             for m in single_bt_re.finditer(line):
                 span = m.group(1)
                 if "'" in span:
-                    errors.append(
-                        f"  {rel}:{i} single-backtick span `{span}` contains a single quote, which Doxygen treats as ending the span. Fix: use double backticks ``{span}``"
-                    )
+                    errors.append(f"  {rel}:{i} single-backtick span `{span}` contains a single quote, which Doxygen treats as ending the span. Fix: use double backticks ``{span}``")
 
     return errors
 
@@ -794,9 +746,7 @@ def check_amsmath_in_doxygen_math(repo_root: Path) -> list[str]:
             for m in inline_re.finditer(line):
                 for cm in ams_re.finditer(m.group(1)):
                     alt = _AMSMATH_ONLY_CMDS[cm.group(1)]
-                    errors.append(
-                        f"  {rel}:{i} uses \\{cm.group(1)} (AMSmath) in math. Fix: use \\{alt} instead"
-                    )
+                    errors.append(f"  {rel}:{i} uses \\{cm.group(1)} (AMSmath) in math. Fix: use \\{alt} instead")
 
             # Check display math lines between \f[ and \f]
             if "\\f[" in line:
@@ -804,9 +754,7 @@ def check_amsmath_in_doxygen_math(repo_root: Path) -> list[str]:
             if in_display:
                 for cm in ams_re.finditer(line):
                     alt = _AMSMATH_ONLY_CMDS[cm.group(1)]
-                    errors.append(
-                        f"  {rel}:{i} uses \\{cm.group(1)} (AMSmath) in math. Fix: use \\{alt} instead"
-                    )
+                    errors.append(f"  {rel}:{i} uses \\{cm.group(1)} (AMSmath) in math. Fix: use \\{alt} instead")
             if "\\f]" in line:
                 in_display = False
 
@@ -849,9 +797,7 @@ def check_module_briefs(repo_root: Path) -> list[str]:
 
         if not found_brief:
             rel = fpp.relative_to(repo_root)
-            errors.append(
-                f"  {rel} has no module-level !> @brief before the module declaration. Fix: add '!> @brief <description>' on the line before 'module ...'"
-            )
+            errors.append(f"  {rel} has no module-level !> @brief before the module declaration. Fix: add '!> @brief <description>' on the line before 'module ...'")
 
     return errors
 

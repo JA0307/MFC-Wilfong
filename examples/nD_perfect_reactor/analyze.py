@@ -95,16 +95,8 @@ mfc_induction = find_induction_time(mfc_times, mfc_Ys["OH"], mfc_rhos)
 
 print("Induction Times ([OH] >= 1e-6 mol/m^3):")
 print(f"  Skinner et al.: {skinner_induction_time:.3e} s")
-print(
-    f"  Cantera:        {ct_induction:.3e} s"
-    if ct_induction is not None
-    else "  Cantera:        not reached"
-)
-print(
-    f"  (Che)MFC:       {mfc_induction:.3e} s"
-    if mfc_induction is not None
-    else "  (Che)MFC:       not reached"
-)
+print(f"  Cantera:        {ct_induction:.3e} s" if ct_induction is not None else "  Cantera:        not reached")
+print(f"  (Che)MFC:       {mfc_induction:.3e} s" if mfc_induction is not None else "  (Che)MFC:       not reached")
 
 # Plot
 fig, axes = plt.subplots(1, 2, figsize=(12, 6))
@@ -114,14 +106,7 @@ _color = {y: _colors[i % len(_colors)] for i, y in enumerate(sorted(Y_VARS))}
 for ax, group in zip(axes, [sorted(Y_MAJORS), sorted(Y_MINORS)]):
     for y in group:
         ax.plot(mfc_times, mfc_Ys[y], color=_color[y], label=f"${y}$")
-        ax.plot(
-            ct_ts,
-            [Y[sol.species_index(y)] for Y in ct_Ys],
-            linestyle=":",
-            color=_color[y],
-            alpha=0.6,
-            label=f"{y} (Cantera)",
-        )
+        ax.plot(ct_ts, [Y[sol.species_index(y)] for Y in ct_Ys], linestyle=":", color=_color[y], alpha=0.6, label=f"{y} (Cantera)")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("$Y_k$")
     ax.set_xscale("log")
@@ -140,11 +125,7 @@ for ax in axes:
             ax.axvline(t, color=c, linestyle=ls)
 
 axes[0].legend(
-    handles=[
-        plt.Line2D([0], [0], color=c, linestyle=ls)
-        for t, c, ls, _lbl in induction_lines
-        if t is not None
-    ],
+    handles=[plt.Line2D([0], [0], color=c, linestyle=ls) for t, c, ls, _lbl in induction_lines if t is not None],
     labels=[lbl for t, _c, _ls, lbl in induction_lines if t is not None],
     title="Induction Times",
     loc="lower right",

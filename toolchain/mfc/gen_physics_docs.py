@@ -142,9 +142,7 @@ def _render_method(doc: dict, method_rules: List[Rule], lines: List[str]) -> Non
 
     if method_rules:
         stages = _collect_stages(method_rules)
-        lines.append(
-            f"**Stage:** {_stages_str(stages)} | **Severity:** {_severity_badge(method_rules)}\n"
-        )
+        lines.append(f"**Stage:** {_stages_str(stages)} | **Severity:** {_severity_badge(method_rules)}\n")
 
         seen: Set[str] = set()
         msgs = []
@@ -155,9 +153,7 @@ def _render_method(doc: dict, method_rules: List[Rule], lines: List[str]) -> Non
         if msgs:
             lines.append("**Enforced checks:**\n")
             for m in msgs:
-                lines.append(
-                    f"{_SEVERITY_ICON.get(m.severity, '- ')}{_format_message(m.message)}"
-                )
+                lines.append(f"{_SEVERITY_ICON.get(m.severity, '- ')}{_format_message(m.message)}")
             lines.append("")
 
     if "exceptions" in doc:
@@ -187,12 +183,8 @@ def render(rules: List[Rule]) -> str:
     lines: List[str] = []
     lines.append("@page physics_constraints Physics Constraints\n")
     lines.append("# Physics Constraints Reference\n")
-    lines.append(
-        "> Auto-generated from `PHYSICS_DOCS` in `case_validator.py` and AST-extracted validation rules. Do not edit by hand.\n"
-    )
-    lines.append(
-        "This document catalogs the physics constraints enforced by MFC's case parameter validator. Constraints are organized by physical category with mathematical justifications.\n"
-    )
+    lines.append("> Auto-generated from `PHYSICS_DOCS` in `case_validator.py` and AST-extracted validation rules. Do not edit by hand.\n")
+    lines.append("This document catalogs the physics constraints enforced by MFC's case parameter validator. Constraints are organized by physical category with mathematical justifications.\n")
     lines.append(
         'For parameter syntax and allowed values, see @ref case "Case Files" and '
         'the @ref parameters "Case Parameters" reference. '

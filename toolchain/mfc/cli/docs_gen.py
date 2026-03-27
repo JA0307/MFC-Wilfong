@@ -16,11 +16,7 @@ def _escape_doxygen(text: str) -> str:
     # Escape # followed by a letter (Doxygen interprets as section ref)
     text = re.sub(r"#([a-zA-Z])", r"\#\1", text)
     # Escape bare <word> that aren't HTML (Doxygen treats as XML tag)
-    text = re.sub(
-        r"<(?!/?(?:code|b|i|em|strong|br|details|summary|p|ul|li|ol|a|pre|table|tr|td|th|sup|sub|hr)\b)(\w+)>",
-        r"\\<\1>",
-        text,
-    )
+    text = re.sub(r"<(?!/?(?:code|b|i|em|strong|br|details|summary|p|ul|li|ol|a|pre|table|tr|td|th|sup|sub|hr)\b)(\w+)>", r"\\<\1>", text)
     return text
 
 
@@ -97,12 +93,8 @@ def _generate_options_table(cmd: Command, schema: CLISchema) -> List[str]:
         # Add MFC config flags if included
         if "mfc_config" in cmd.include_common:
             lines.append("| `--mpi`, `--no-mpi` | Enable/disable MPI | `true` |")
-            lines.append(
-                "| `--gpu [acc/mp]`, `--no-gpu` | Enable GPU (OpenACC/OpenMP) | `no` |"
-            )
-            lines.append(
-                "| `--debug`, `--no-debug` | Build with debug compiler flags | `false` |"
-            )
+            lines.append("| `--gpu [acc/mp]`, `--no-gpu` | Enable GPU (OpenACC/OpenMP) | `no` |")
+            lines.append("| `--debug`, `--no-debug` | Build with debug compiler flags | `false` |")
 
         lines.append("")
 
@@ -203,9 +195,7 @@ def _generate_command_section(cmd: Command, schema: CLISchema) -> List[str]:
     return lines
 
 
-def _generate_commands_by_category(
-    schema: CLISchema, category_commands: List[str], header: str
-) -> List[str]:
+def _generate_commands_by_category(schema: CLISchema, category_commands: List[str], header: str) -> List[str]:
     """Generate command sections for a category."""
     lines = []
     matching = [c for c in schema.commands if c.name in category_commands]
@@ -242,9 +232,7 @@ def generate_cli_reference(schema: CLISchema) -> str:
     for cmd in schema.commands:
         alias = f"`{cmd.aliases[0]}`" if cmd.aliases else "-"
         # Use HTML code tag inside link to avoid Doxygen markdown parsing issues
-        lines.append(
-            f"| [<code>{cmd.name}</code>](#{cmd.name}) | {alias} | {cmd.help} |"
-        )
+        lines.append(f"| [<code>{cmd.name}</code>](#{cmd.name}) | {alias} | {cmd.help} |")
 
     lines.append("")
     lines.append("## Commands")
@@ -252,15 +240,7 @@ def generate_cli_reference(schema: CLISchema) -> str:
 
     # Command categories
     core_commands = ["build", "run", "test", "clean", "validate"]
-    utility_commands = [
-        "new",
-        "viz",
-        "params",
-        "packer",
-        "completion",
-        "generate",
-        "help",
-    ]
+    utility_commands = ["new", "viz", "params", "packer", "completion", "generate", "help"]
     dev_commands = ["lint", "format", "spelling", "precheck", "count", "count_diff"]
     ci_commands = ["bench", "bench_diff"]
     other_commands = ["load", "interactive"]
@@ -271,16 +251,10 @@ def generate_cli_reference(schema: CLISchema) -> str:
             lines.extend(_generate_command_section(cmd, schema))
 
     # Category sections
-    lines.extend(
-        _generate_commands_by_category(schema, utility_commands, "Utility Commands")
-    )
-    lines.extend(
-        _generate_commands_by_category(schema, dev_commands, "Development Commands")
-    )
+    lines.extend(_generate_commands_by_category(schema, utility_commands, "Utility Commands"))
+    lines.extend(_generate_commands_by_category(schema, dev_commands, "Development Commands"))
     lines.extend(_generate_commands_by_category(schema, ci_commands, "CI Commands"))
-    lines.extend(
-        _generate_commands_by_category(schema, other_commands, "Other Commands")
-    )
+    lines.extend(_generate_commands_by_category(schema, other_commands, "Other Commands"))
 
     # Common options section
     lines.extend(

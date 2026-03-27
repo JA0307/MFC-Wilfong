@@ -17,11 +17,7 @@ def setup_debug_logging(enabled: bool = False):
     """Setup debug logging for troubleshooting."""
     global _debug_logger  # noqa: PLW0603
     if enabled:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="[DEBUG %(asctime)s] %(message)s",
-            datefmt="%H:%M:%S",
-        )
+        logging.basicConfig(level=logging.DEBUG, format="[DEBUG %(asctime)s] %(message)s", datefmt="%H:%M:%S")
         _debug_logger = logging.getLogger("mfc")
         _debug_logger.setLevel(logging.DEBUG)
         cons.print("[dim]Debug logging enabled[/dim]")
@@ -63,9 +59,7 @@ class MFCException(Exception):
     pass
 
 
-def system(
-    command: typing.List[str], print_cmd=None, **kwargs
-) -> subprocess.CompletedProcess:
+def system(command: typing.List[str], print_cmd=None, **kwargs) -> subprocess.CompletedProcess:
     cmd = [str(x) for x in command if not isspace(str(x))]
 
     if print_cmd in [True, None]:
@@ -136,9 +130,7 @@ def delete_directory(dirpath: str) -> None:
 
 
 def get_program_output(arguments: typing.List[str] = None, cwd=None):
-    with subprocess.Popen(
-        [str(_) for _ in arguments] or [], cwd=cwd, stdout=subprocess.PIPE
-    ) as proc:
+    with subprocess.Popen([str(_) for _ in arguments] or [], cwd=cwd, stdout=subprocess.PIPE) as proc:
         return (proc.communicate()[0].decode(), proc.returncode)
 
 
@@ -239,20 +231,12 @@ def is_number(x: str) -> bool:
 def get_cpuinfo():
     if does_command_exist("lscpu"):
         # Linux
-        with subprocess.Popen(
-            ["lscpu"], stdout=subprocess.PIPE, universal_newlines=True
-        ) as proc:
+        with subprocess.Popen(["lscpu"], stdout=subprocess.PIPE, universal_newlines=True) as proc:
             output = f"From lscpu\n{proc.communicate()[0]}"
     elif does_command_exist("sysctl"):
         # MacOS
         with subprocess.Popen(["sysctl", "-a"], stdout=subprocess.PIPE) as proc1:
-            with subprocess.Popen(
-                ["grep", "machdep.cpu"],
-                stdin=proc1.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-            ) as proc2:
+            with subprocess.Popen(["grep", "machdep.cpu"], stdin=proc1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as proc2:
                 proc1.stdout.close()  # Allow proc1 to receive a SIGPIPE if proc2 exits.
                 output = f"From sysctl -a \n{proc2.communicate()[0]}"
     else:
@@ -265,24 +249,8 @@ def generate_git_tagline() -> str:
     if not does_command_exist("git"):
         return "Could not find git"
 
-    rev = (
-        system(["git", "rev-parse", "HEAD"], print_cmd=False, stdout=subprocess.PIPE)
-        .stdout.decode()
-        .strip()
-    )
-    branch = (
-        system(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            print_cmd=False,
-            stdout=subprocess.PIPE,
-        )
-        .stdout.decode()
-        .strip()
-    )
-    dirty = (
-        "dirty"
-        if system(["git", "diff", "--quiet"], print_cmd=False).returncode != 0
-        else "clean"
-    )
+    rev = system(["git", "rev-parse", "HEAD"], print_cmd=False, stdout=subprocess.PIPE).stdout.decode().strip()
+    branch = system(["git", "rev-parse", "--abbrev-ref", "HEAD"], print_cmd=False, stdout=subprocess.PIPE).stdout.decode().strip()
+    dirty = "dirty" if system(["git", "diff", "--quiet"], print_cmd=False).returncode != 0 else "clean"
 
     return f"{rev} on {branch} ({dirty})"

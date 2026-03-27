@@ -53,9 +53,7 @@ class WorkerThreadHolder:
     task: typing.Optional["Task"] = None
     start: float = 0.0
     # Track which milestones we've already logged
-    notified_interactive: bool = (
-        False  # First notification in interactive mode (time varies by dimensionality)
-    )
+    notified_interactive: bool = False  # First notification in interactive mode (time varies by dimensionality)
     notified_2m: bool = False  # Headless mode: 2 minute milestone
     notified_10m: bool = False  # Headless mode: 10 minute milestone
     notified_30m: bool = False  # Headless mode: 30 minute milestone
@@ -69,11 +67,7 @@ class Task:
     load: float
 
 
-def sched(
-    tasks: typing.List[Task],
-    nThreads: int,
-    devices: typing.Optional[typing.Set[int]] = None,
-) -> None:
+def sched(tasks: typing.List[Task], nThreads: int, devices: typing.Optional[typing.Set[int]] = None) -> None:
     nAvailable: int = nThreads
     threads: typing.List[WorkerThreadHolder] = []
 
@@ -108,11 +102,7 @@ def sched(
         dim = get_case_dimensionality(case)
         return INTERACTIVE_THRESHOLDS.get(dim, INTERACTIVE_THRESHOLDS[1])
 
-    def notify_long_running_threads(
-        progress: rich.progress.Progress,
-        running_tracker: typing.Optional[rich.progress.TaskID],
-        interactive: bool,
-    ) -> None:
+    def notify_long_running_threads(progress: rich.progress.Progress, running_tracker: typing.Optional[rich.progress.TaskID], interactive: bool) -> None:
         """
         Monitor and notify about long-running tests.
 
@@ -143,37 +133,25 @@ def sched(
                     if not holder.notified_interactive:
                         dim = get_case_dimensionality(case)
                         dim_label = f"{dim}D"
-                        time_label = (
-                            f"{int(threshold)}s"
-                            if threshold < 60
-                            else f"{threshold / 60:.0f}min"
-                        )
-                        cons.print(
-                            f"  [italic yellow]Still running[/italic yellow] ({dim_label}, >{time_label}) [bold magenta]{case_uuid}[/bold magenta]  {case_trace}"
-                        )
+                        time_label = f"{int(threshold)}s" if threshold < 60 else f"{threshold / 60:.0f}min"
+                        cons.print(f"  [italic yellow]Still running[/italic yellow] ({dim_label}, >{time_label}) [bold magenta]{case_uuid}[/bold magenta]  {case_trace}")
                         holder.notified_interactive = True
 
             # headless: milestone notifications at 2, 10, 30 minutes
             else:
                 # 2 minutes
                 if (not holder.notified_2m) and elapsed >= 2 * 60:
-                    cons.print(
-                        f"  {HEADLESS_THRESHOLDS[0][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}"
-                    )
+                    cons.print(f"  {HEADLESS_THRESHOLDS[0][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}")
                     holder.notified_2m = True
 
                 # 10 minutes
                 if (not holder.notified_10m) and elapsed >= 10 * 60:
-                    cons.print(
-                        f"  {HEADLESS_THRESHOLDS[1][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}"
-                    )
+                    cons.print(f"  {HEADLESS_THRESHOLDS[1][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}")
                     holder.notified_10m = True
 
                 # 30 minutes
                 if (not holder.notified_30m) and elapsed >= 30 * 60:
-                    cons.print(
-                        f"  {HEADLESS_THRESHOLDS[2][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}"
-                    )
+                    cons.print(f"  {HEADLESS_THRESHOLDS[2][1]} [bold magenta]{case_uuid}[/bold magenta]  {case_trace}")
                     holder.notified_30m = True
 
         # update the interactive "Running" row
@@ -182,9 +160,7 @@ def sched(
                 summary = ", ".join(uuid for uuid, _ in long_running_for_progress[:5])
                 if len(long_running_for_progress) > 5:
                     summary += f", +{len(long_running_for_progress) - 5} more"
-                progress.update(
-                    running_tracker, description=f"Running (long): {summary}"
-                )
+                progress.update(running_tracker, description=f"Running (long): {summary}")
             else:
                 progress.update(running_tracker, description="Running (long): none")
 
@@ -203,15 +179,11 @@ def sched(
                     # Double-check that thread actually finished joining
                     if threadHolder.thread.is_alive():
                         # Thread didn't finish within timeout - this is a serious issue
-                        raise RuntimeError(
-                            f"Thread {threadID} failed to join within 30 seconds timeout. Thread may be hung or in an inconsistent state."
-                        )
+                        raise RuntimeError(f"Thread {threadID} failed to join within 30 seconds timeout. Thread may be hung or in an inconsistent state.")
 
                 except Exception as join_exc:
                     # Handle join-specific exceptions with more context
-                    raise RuntimeError(
-                        f"Failed to join thread {threadID}: {join_exc}. This may indicate a system threading issue or hung test case."
-                    ) from join_exc
+                    raise RuntimeError(f"Failed to join thread {threadID}: {join_exc}. This may indicate a system threading issue or hung test case.") from join_exc
 
                 # Check for and propagate any exceptions that occurred in the worker thread
                 if threadHolder.thread.exc is not None:
@@ -224,18 +196,10 @@ def sched(
                 # Print completion message for long-running tests in interactive mode
                 if interactive and threadHolder.notified_interactive:
                     elapsed = time.time() - threadHolder.start
-                    case = (
-                        threadHolder.task.args[0]
-                        if threadHolder.task and threadHolder.task.args
-                        else None
-                    )
-                    case_uuid = (
-                        case.get_uuid() if hasattr(case, "get_uuid") else "unknown"
-                    )
+                    case = threadHolder.task.args[0] if threadHolder.task and threadHolder.task.args else None
+                    case_uuid = case.get_uuid() if hasattr(case, "get_uuid") else "unknown"
                     case_trace = getattr(case, "trace", "")
-                    cons.print(
-                        f"  [italic green]Completed[/italic green] (after {elapsed:.1f}s) [bold magenta]{case_uuid}[/bold magenta]  {case_trace}"
-                    )
+                    cons.print(f"  [italic green]Completed[/italic green] (after {elapsed:.1f}s) [bold magenta]{case_uuid}[/bold magenta]  {case_trace}")
 
                 nAvailable += threadHolder.ppn
                 for device in threadHolder.devices or set():
@@ -251,9 +215,7 @@ def sched(
         interactive = cons.raw.is_terminal
         queue_tracker = progress.add_task("Queued    ", total=len(tasks))
         complete_tracker = progress.add_task("Completed ", total=len(tasks))
-        running_tracker = (
-            progress.add_task("Running   ", total=None) if interactive else None
-        )
+        running_tracker = progress.add_task("Running   ", total=None) if interactive else None
 
         # Queue Tests
         for task in tasks:
@@ -287,9 +249,7 @@ def sched(
 
             nAvailable -= task.ppn
 
-            thread = WorkerThread(
-                target=task.func, args=tuple(task.args) + (use_devices,)
-            )
+            thread = WorkerThread(target=task.func, args=tuple(task.args) + (use_devices,))
             thread.start()
 
             threads.append(

@@ -3,6 +3,7 @@
 # forces. While the relaxation is not complete, it demonstrates the expecteed symmetric behavior.
 
 import json
+import math
 
 l = 0.375
 

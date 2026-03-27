@@ -8,15 +8,7 @@ import signal
 
 # Only import what's needed for startup - other modules are loaded lazily
 from mfc import args, lock, state
-from mfc.common import (
-    MFC_LOGO,
-    MFC_ROOT_DIR,
-    MFCException,
-    does_command_exist,
-    format_list_to_string,
-    quit,
-    setup_debug_logging,
-)
+from mfc.common import MFC_LOGO, MFC_ROOT_DIR, MFCException, does_command_exist, format_list_to_string, quit, setup_debug_logging
 from mfc.printer import cons
 from mfc.state import ARG
 
@@ -94,9 +86,7 @@ def __ensure_generated_files():
         return  # No source files found, skip check
 
     # Check if any generated file is missing or older than sources
-    needs_regen = any(
-        not os.path.exists(g) or os.path.getmtime(g) < source_mtime for g in generated
-    )
+    needs_regen = any(not os.path.exists(g) or os.path.getmtime(g) < source_mtime for g in generated)
 
     if needs_regen:
         __do_regenerate(toolchain)
@@ -137,9 +127,7 @@ def __checks():
     if ARG("command") == "viz":
         return
     if not does_command_exist("cmake"):
-        raise MFCException(
-            "CMake is required to build MFC but couldn't be located on your system. Please ensure it installed and discoverable (e.g in your system's $PATH)."
-        )
+        raise MFCException("CMake is required to build MFC but couldn't be located on your system. Please ensure it installed and discoverable (e.g in your system's $PATH).")
 
 
 def __run():

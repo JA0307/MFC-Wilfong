@@ -62,9 +62,7 @@ def install_bash():
     dest = COMPLETION_INSTALL_DIR / "mfc.bash"
     if BASH_COMPLETION_SRC.exists():
         shutil.copy2(BASH_COMPLETION_SRC, dest)
-        cons.print(
-            f"  [green]✓[/green] Copied completion script to [cyan]{dest}[/cyan]"
-        )
+        cons.print(f"  [green]✓[/green] Copied completion script to [cyan]{dest}[/cyan]")
     else:
         cons.print(f"  [red]✗[/red] Source file not found: {BASH_COMPLETION_SRC}")
         return False
@@ -95,9 +93,7 @@ def install_zsh():
     dest = COMPLETION_INSTALL_DIR / "_mfc"
     if ZSH_COMPLETION_SRC.exists():
         shutil.copy2(ZSH_COMPLETION_SRC, dest)
-        cons.print(
-            f"  [green]✓[/green] Copied completion script to [cyan]{dest}[/cyan]"
-        )
+        cons.print(f"  [green]✓[/green] Copied completion script to [cyan]{dest}[/cyan]")
     else:
         cons.print(f"  [red]✗[/red] Source file not found: {ZSH_COMPLETION_SRC}")
         return False
@@ -113,9 +109,7 @@ def install_zsh():
             _append_to_file(ZSHRC, compinit_line)
             cons.print(f"  [green]✓[/green] Added compinit to [cyan]{ZSHRC}[/cyan]")
     else:
-        cons.print(
-            f"  [yellow]![/yellow] {ZSHRC} not found - you may need to configure manually"
-        )
+        cons.print(f"  [yellow]![/yellow] {ZSHRC} not found - you may need to configure manually")
         cons.print(f"    Add to your shell config: {ZSH_FPATH_LINE}")
 
     cons.print()
@@ -149,9 +143,7 @@ def uninstall():
     # Note: We don't automatically remove lines from .bashrc/.zshrc
     # as that's more risky. Just inform the user.
     cons.print()
-    cons.print(
-        "[yellow]Note:[/yellow] You may want to manually remove the MFC completion lines from:"
-    )
+    cons.print("[yellow]Note:[/yellow] You may want to manually remove the MFC completion lines from:")
     cons.print(f"  [cyan]{BASHRC}[/cyan]")
     cons.print(f"  [cyan]{ZSHRC}[/cyan]")
 
@@ -165,9 +157,7 @@ def show_status():
 
     # Check installation directory
     if COMPLETION_INSTALL_DIR.exists():
-        cons.print(
-            f"  [green]✓[/green] Install directory: [cyan]{COMPLETION_INSTALL_DIR}[/cyan]"
-        )
+        cons.print(f"  [green]✓[/green] Install directory: [cyan]{COMPLETION_INSTALL_DIR}[/cyan]")
 
         bash_installed = (COMPLETION_INSTALL_DIR / "mfc.bash").exists()
         zsh_installed = (COMPLETION_INSTALL_DIR / "_mfc").exists()
@@ -221,18 +211,8 @@ def completion():
         show_status()
         cons.print()
         cons.print("[bold]Usage:[/bold]")
-        cons.print(
-            "  [cyan]./mfc.sh completion install[/cyan]        Auto-detect shell and install"
-        )
-        cons.print(
-            "  [cyan]./mfc.sh completion install bash[/cyan]   Install bash completion"
-        )
-        cons.print(
-            "  [cyan]./mfc.sh completion install zsh[/cyan]    Install zsh completion"
-        )
-        cons.print(
-            "  [cyan]./mfc.sh completion uninstall[/cyan]      Remove completion files"
-        )
-        cons.print(
-            "  [cyan]./mfc.sh completion status[/cyan]         Show installation status"
-        )
+        cons.print("  [cyan]./mfc.sh completion install[/cyan]        Auto-detect shell and install")
+        cons.print("  [cyan]./mfc.sh completion install bash[/cyan]   Install bash completion")
+        cons.print("  [cyan]./mfc.sh completion install zsh[/cyan]    Install zsh completion")
+        cons.print("  [cyan]./mfc.sh completion uninstall[/cyan]      Remove completion files")
+        cons.print("  [cyan]./mfc.sh completion status[/cyan]         Show installation status")

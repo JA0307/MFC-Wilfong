@@ -25,9 +25,7 @@ def validate():
     try:
         # Step 1: Load and parse case file (checks syntax)
         case = run_input.load(input_file, do_print=False)
-        cons.print(
-            "[bold green]✓[/bold green] Syntax valid - case file parsed successfully"
-        )
+        cons.print("[bold green]✓[/bold green] Syntax valid - case file parsed successfully")
         cons.print(f"  [dim]Loaded {len(case.params)} parameters[/dim]")
 
         # Step 2: Run constraint validation for each stage
@@ -39,18 +37,14 @@ def validate():
                 validator = CaseValidator(case.params)
                 warnings = validator.validate(stage)
                 if warnings:
-                    cons.print(
-                        f"[bold green]✓[/bold green] {stage} constraints passed (with warnings)"
-                    )
+                    cons.print(f"[bold green]✓[/bold green] {stage} constraints passed (with warnings)")
                     for warning in warnings:
                         cons.print(f"    [yellow]⚠ {warning}[/yellow]")
                 else:
                     cons.print(f"[bold green]✓[/bold green] {stage} constraints passed")
             except CaseConstraintError as e:
                 all_passed = False
-                cons.print(
-                    f"[bold yellow]![/bold yellow] {stage} constraints: issues found"
-                )
+                cons.print(f"[bold yellow]![/bold yellow] {stage} constraints: issues found")
                 # Show the constraint violations indented
                 for line in str(e).split("\n"):
                     if line.strip():
@@ -59,16 +53,10 @@ def validate():
         # Step 3: Show summary
         cons.print()
         if all_passed:
-            cons.print(
-                "[bold green]Case validation complete - all checks passed![/bold green]"
-            )
+            cons.print("[bold green]Case validation complete - all checks passed![/bold green]")
         else:
-            cons.print(
-                "[bold yellow]Case validation complete with warnings.[/bold yellow]"
-            )
-            cons.print(
-                "[dim]Note: Some constraint violations may be OK if you're not using that stage.[/dim]"
-            )
+            cons.print("[bold yellow]Case validation complete with warnings.[/bold yellow]")
+            cons.print("[dim]Note: Some constraint violations may be OK if you're not using that stage.[/dim]")
 
     except MFCException as e:
         cons.print("\n[bold red]✗ Validation failed:[/bold red]")

@@ -31,14 +31,7 @@ QPVF_IDX_VARS = {
     "Bz": "B_idx%end",
 }
 
-MIBM_ANALYTIC_VARS = [
-    "vel(1)",
-    "vel(2)",
-    "vel(3)",
-    "angular_vel(1)",
-    "angular_vel(2)",
-    "angular_vel(3)",
-]
+MIBM_ANALYTIC_VARS = ["vel(1)", "vel(2)", "vel(3)", "angular_vel(1)", "angular_vel(2)", "angular_vel(3)"]
 # "B_idx%end - 1" not "B_idx%beg + 1" must be used because 1D does not have Bx
 
 
@@ -53,9 +46,7 @@ class Case:
         return self.params
 
     def get_cell_count(self) -> int:
-        return math.prod(
-            [max(1, int(self.params.get(dir, 0))) for dir in ["m", "n", "p"]]
-        )
+        return math.prod([max(1, int(self.params.get(dir, 0))) for dir in ["m", "n", "p"]])
 
     def has_parameter(self, key: str) -> bool:
         return key in self.params.keys()
@@ -79,9 +70,7 @@ class Case:
         dict_str = ""
         for key, val in self.params.items():
             if key in MASTER_KEYS and key not in case_dicts.IGNORE:
-                if self.__is_ic_analytical(key, val) or self.__is_mib_analytical(
-                    key, val
-                ):
+                if self.__is_ic_analytical(key, val) or self.__is_mib_analytical(key, val):
                     dict_str += f"{key} = 0d0\n"
                     ignored.append(key)
                     continue
@@ -95,14 +84,10 @@ class Case:
 
             if key not in case_dicts.ALL:
                 suggestions = _suggest_similar_params(key, list(case_dicts.ALL.keys()))
-                hint = (
-                    f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                )
+                hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise common.MFCException(f"Unknown parameter '{key}'.{hint}")
 
-        cons.print(
-            f"[yellow]INFO:[/yellow] Forwarded {len(self.params) - len(ignored)}/{len(self.params)} parameters."
-        )
+        cons.print(f"[yellow]INFO:[/yellow] Forwarded {len(self.params) - len(ignored)}/{len(self.params)} parameters.")
         cons.unindent()
 
         return f"&user_inputs\n{dict_str}&end/\n"
@@ -140,11 +125,7 @@ class Case:
             raise common.MFCException(f"Validation errors:\n{error_msg}")
 
     def __get_ndims(self) -> int:
-        return (
-            1
-            + min(int(self.params.get("n", 0)), 1)
-            + min(int(self.params.get("p", 0)), 1)
-        )
+        return 1 + min(int(self.params.get("n", 0)), 1) + min(int(self.params.get("p", 0)), 1)
 
     def __is_ic_analytical(self, key: str, val: str) -> bool:
         """Is this initial condition analytical?
@@ -202,9 +183,7 @@ class Case:
             ptype = self.params[f"patch_icpp({pid})%geometry"]
 
             if ptype not in DATA["ptypes"]:
-                raise common.MFCException(
-                    f"Patch #{pid} of type {ptype} cannot be analytically defined."
-                )
+                raise common.MFCException(f"Patch #{pid} of type {ptype} cannot be analytically defined.")
 
             # function that defines how we will replace variable names with
             # values from the case file
@@ -369,11 +348,7 @@ class Case:
             else:
                 weno_num_stencils = weno_polyn
 
-            num_dims = (
-                1
-                + min(int(self.params.get("n", 0)), 1)
-                + min(int(self.params.get("p", 0)), 1)
-            )
+            num_dims = 1 + min(int(self.params.get("n", 0)), 1) + min(int(self.params.get("p", 0)), 1)
             if self.params.get("mhd", "F") == "T":
                 num_vels = 3
             else:

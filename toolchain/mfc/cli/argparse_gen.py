@@ -8,14 +8,7 @@ import argparse
 import dataclasses
 from typing import Dict, Tuple
 
-from .schema import (
-    ArgAction,
-    Argument,
-    CLISchema,
-    Command,
-    CommonArgumentSet,
-    Positional,
-)
+from .schema import ArgAction, Argument, CLISchema, Command, CommonArgumentSet, Positional
 
 
 def _action_to_argparse(action: ArgAction) -> str:
@@ -98,35 +91,15 @@ def _add_mfc_config_arguments(parser: argparse.ArgumentParser, config):
                 choices=[e.value for e in gpuConfigOptions],
                 help=f"Turn the {f.name} option to OpenACC or OpenMP.",
             )
-            parser.add_argument(
-                f"--no-{f.name}",
-                action="store_const",
-                const=gpuConfigOptions.NONE.value,
-                dest=f.name,
-                help=f"Turn the {f.name} option OFF.",
-            )
+            parser.add_argument(f"--no-{f.name}", action="store_const", const=gpuConfigOptions.NONE.value, dest=f.name, help=f"Turn the {f.name} option OFF.")
         else:
-            parser.add_argument(
-                f"--{f.name}", action="store_true", help=f"Turn the {f.name} option ON."
-            )
-            parser.add_argument(
-                f"--no-{f.name}",
-                action="store_false",
-                dest=f.name,
-                help=f"Turn the {f.name} option OFF.",
-            )
+            parser.add_argument(f"--{f.name}", action="store_true", help=f"Turn the {f.name} option ON.")
+            parser.add_argument(f"--no-{f.name}", action="store_false", dest=f.name, help=f"Turn the {f.name} option OFF.")
 
-    parser.set_defaults(
-        **{f.name: getattr(config, f.name) for f in dataclasses.fields(config)}
-    )
+    parser.set_defaults(**{f.name: getattr(config, f.name) for f in dataclasses.fields(config)})
 
 
-def _add_common_arguments(
-    parser: argparse.ArgumentParser,
-    command: Command,
-    common_sets: Dict[str, CommonArgumentSet],
-    config=None,
-):
+def _add_common_arguments(parser: argparse.ArgumentParser, command: Command, common_sets: Dict[str, CommonArgumentSet], config=None):
     """Add common arguments to a command parser."""
     for set_name in command.include_common:
         common_set = common_sets.get(set_name)
@@ -141,9 +114,7 @@ def _add_common_arguments(
                 _add_argument(parser, arg)
 
 
-def _add_command_subparser(
-    subparsers, cmd: Command, common_sets: Dict[str, CommonArgumentSet], config
-) -> argparse.ArgumentParser:
+def _add_command_subparser(subparsers, cmd: Command, common_sets: Dict[str, CommonArgumentSet], config) -> argparse.ArgumentParser:
     """Add a single command's subparser and return it."""
     subparser = subparsers.add_parser(
         name=cmd.name,
@@ -219,8 +190,6 @@ def generate_parser(
     subparser_map: Dict[str, argparse.ArgumentParser] = {}
 
     for cmd in schema.commands:
-        subparser_map[cmd.name] = _add_command_subparser(
-            subparsers, cmd, common_sets, config
-        )
+        subparser_map[cmd.name] = _add_command_subparser(subparsers, cmd, common_sets, config)
 
     return parser, subparser_map

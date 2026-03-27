@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 
 # Case for smooth Alfven waves from section 6.3.1 of:
 # The ∇·B=0 Constraint in Shock-Capturing Magnetohydrodynamics Codes

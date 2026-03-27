@@ -362,9 +362,7 @@ def get_available_templates():
     if os.path.isdir(MFC_EXAMPLE_DIRPATH):
         for name in sorted(os.listdir(MFC_EXAMPLE_DIRPATH)):
             example_path = os.path.join(MFC_EXAMPLE_DIRPATH, name)
-            if os.path.isdir(example_path) and os.path.isfile(
-                os.path.join(example_path, "case.py")
-            ):
+            if os.path.isdir(example_path) and os.path.isfile(os.path.join(example_path, "case.py")):
                 templates.append(f"example:{name}")
 
     return templates
@@ -390,18 +388,14 @@ def list_templates():
         examples = []
         for name in sorted(os.listdir(MFC_EXAMPLE_DIRPATH)):
             example_path = os.path.join(MFC_EXAMPLE_DIRPATH, name)
-            if os.path.isdir(example_path) and os.path.isfile(
-                os.path.join(example_path, "case.py")
-            ):
+            if os.path.isdir(example_path) and os.path.isfile(os.path.join(example_path, "case.py")):
                 examples.append(name)
 
         # Group by dimension
         for dim in ["0D", "1D", "2D", "3D"]:
             dim_examples = [e for e in examples if e.startswith(dim)]
             if dim_examples:
-                cons.print(
-                    f"    [dim]{dim}:[/dim] {', '.join(dim_examples[:5])}", end=""
-                )
+                cons.print(f"    [dim]{dim}:[/dim] {', '.join(dim_examples[:5])}", end="")
                 if len(dim_examples) > 5:
                     cons.print(f" [dim]... (+{len(dim_examples) - 5} more)[/dim]")
                 else:
@@ -409,13 +403,9 @@ def list_templates():
 
     cons.print()
     cons.print("  [bold]Usage:[/bold]")
-    cons.print(
-        "    ./mfc.sh new my_case                        # Use default 1D template"
-    )
+    cons.print("    ./mfc.sh new my_case                        # Use default 1D template")
     cons.print("    ./mfc.sh new my_case --template 2D_minimal  # Use 2D template")
-    cons.print(
-        "    ./mfc.sh new my_case --template example:1D_sodshocktube  # Copy from example"
-    )
+    cons.print("    ./mfc.sh new my_case --template example:1D_sodshocktube  # Copy from example")
     cons.print()
 
 
@@ -441,9 +431,7 @@ def create_case(name: str, template: str):
         cons.print(f"  Using template: [cyan]{template}[/cyan]")
         cons.print()
         cons.print("  [bold]Next steps:[/bold]")
-        cons.print(
-            f"    1. Edit [cyan]{name}/case.py[/cyan] to configure your simulation"
-        )
+        cons.print(f"    1. Edit [cyan]{name}/case.py[/cyan] to configure your simulation")
         cons.print(f"    2. Run: [cyan]./mfc.sh run {name}/case.py[/cyan]")
         cons.print()
 
@@ -495,9 +483,7 @@ def init():
         _, subparser_map = generate_parser(MFC_CLI_SCHEMA, MFCConfig())
         subparser_map["new"].print_help()
         sys.stdout.flush()
-        sys.stderr.write(
-            "\n./mfc.sh new: error: the following arguments are required: NAME\n"
-        )
+        sys.stderr.write("\n./mfc.sh new: error: the following arguments are required: NAME\n")
         sys.exit(2)
 
     create_case(name, template)

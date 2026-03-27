@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 
 # Bubble screen
 # Description: A planar acoustic wave interacts with a bubble cloud

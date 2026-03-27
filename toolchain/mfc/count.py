@@ -9,9 +9,7 @@ from .printer import cons
 from .state import ARG
 
 
-def handle_dir(
-    mfc_dir: str, srcdirname: str
-) -> typing.Tuple[typing.Dict[str, int], int]:
+def handle_dir(mfc_dir: str, srcdirname: str) -> typing.Tuple[typing.Dict[str, int], int]:
     files = {}
     total = 0
 
@@ -23,9 +21,7 @@ def handle_dir(
                 if line.isspace() or len(line) == 0:
                     continue
                 # Skip comments but not !$acc ones!
-                if line.lstrip().startswith("!") and not line.lstrip().startswith(
-                    "!$acc"
-                ):
+                if line.lstrip().startswith("!") and not line.lstrip().startswith("!$acc"):
                     continue
                 counter += 1
 
@@ -38,9 +34,7 @@ def handle_dir(
 def count():
     target_str_list = format_list_to_string(ARG("targets"), "magenta")
 
-    cons.print(
-        f"[bold]Counting lines of code in {target_str_list}[/bold] (excluding whitespace lines)"
-    )
+    cons.print(f"[bold]Counting lines of code in {target_str_list}[/bold] (excluding whitespace lines)")
     cons.indent()
 
     total = 0
@@ -57,18 +51,14 @@ def count():
 
         cons.raw.print(table)
 
-    cons.print(
-        f"[bold]Total {target_str_list} lines: [bold cyan]{total}[/bold cyan].[/bold]"
-    )
+    cons.print(f"[bold]Total {target_str_list} lines: [bold cyan]{total}[/bold cyan].[/bold]")
     cons.print()
     cons.unindent()
 
 
 def count_diff():
     target_str_list = format_list_to_string(ARG("targets"), "magenta")
-    cons.print(
-        f"[bold]Counting lines of code in {target_str_list}[/bold] (excluding whitespace lines)"
-    )
+    cons.print(f"[bold]Counting lines of code in {target_str_list}[/bold] (excluding whitespace lines)")
     cons.indent()
 
     total = 0
@@ -84,9 +74,7 @@ def count_diff():
         dirfiles_pr, dircount_pr = handle_dir(MFC_COMPARE_DIR, codedir)
         table = rich.table.Table(show_header=True, box=rich.table.box.SIMPLE)
         table.add_column(f"File (in [magenta]{codedir}[/magenta])", justify="left")
-        table.add_column(
-            f"Lines [HEAD] ([cyan]{dircount_root}[/cyan])", justify="right"
-        )
+        table.add_column(f"Lines [HEAD] ([cyan]{dircount_root}[/cyan])", justify="right")
         table.add_column(f"Lines [PR] ([cyan]{dircount_pr}[/cyan])", justify="right")
         table.add_column("", justify="right")
         table.add_column("Diff", justify="right")
@@ -113,8 +101,6 @@ def count_diff():
 
         cons.raw.print(table)
 
-    cons.print(
-        f"[bold]Total {target_str_list} lines: [bold cyan]{total}[/bold cyan].[/bold]"
-    )
+    cons.print(f"[bold]Total {target_str_list} lines: [bold cyan]{total}[/bold cyan].[/bold]")
     cons.print()
     cons.unindent()

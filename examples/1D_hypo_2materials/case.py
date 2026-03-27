@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import json
+import math
 
 # Numerical setup
 Nx = 399
