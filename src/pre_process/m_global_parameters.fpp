@@ -476,6 +476,7 @@ contains
         lag_params%interpolation_order = dflt_int
         lag_params%charNz = dflt_int
         lag_params%valmaxvoid = dflt_real
+        lag_params%mu_ref = dflt_real
 
         do i = 1, num_patches_max
             patch_icpp(i)%geometry = dflt_int
@@ -959,8 +960,8 @@ contains
             allocate (beta_vars(1:3))
             beta_vars(1:3) = [1, 2, 5]
         elseif (particles_lagrange) then
-            allocate (beta_vars(1:8))
-            beta_vars(1:8) = [1, 2, 3, 4, 5, 6, 7, 8]
+            allocate (beta_vars(1:7))
+            beta_vars(1:7) = [1, 2, 3, 4, 5, 6, 7]
         end if
 
         if (chemistry) then

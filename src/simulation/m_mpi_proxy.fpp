@@ -135,8 +135,8 @@ contains
 #ifdef MFC_MPI
         call MPI_Pack_size(1, mpi_p, MPI_COMM_WORLD, real_size, ierr)
         call MPI_Pack_size(1, MPI_INTEGER, MPI_COMM_WORLD, int_size, ierr)
-        nReal = 7 + 13*2 + 7*lag_num_ts
-        p_var_size = (nReal*real_size + int_size)
+        nReal = 10 + 13*2 + 7*lag_num_ts
+        p_var_size = (nReal*real_size + 2*int_size)
         p_buff_size = lag_params%nParticles_glb*p_var_size
         @:ALLOCATE(p_send_buff(0:p_buff_size), p_recv_buff(0:p_buff_size))
         @:ALLOCATE(p_send_ids(nidx(1)%beg:nidx(1)%end, nidx(2)%beg:nidx(2)%end, nidx(3)%beg:nidx(3)%end, 0:lag_params%nParticles_glb))
@@ -244,7 +244,7 @@ contains
         if (particles_lagrange) then
             #:for VAR in [ 'heatTransfer_model', 'massTransfer_model', 'pressure_corrector', &
                 & 'write_bubbles', 'write_bubbles_stats', 'write_void_evol', 'pressure_force', &
-                & 'gravity_force', 'collision_force']
+                & 'gravity_force', 'collision_force', 'qs_fluct_force']
                 call MPI_BCAST(lag_params%${VAR}$, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
             #:endfor
 
@@ -253,7 +253,7 @@ contains
                 call MPI_BCAST(lag_params%${VAR}$, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
             #:endfor
 
-            #:for VAR in ['epsilonb','charwidth','valmaxvoid']
+            #:for VAR in ['epsilonb','charwidth','valmaxvoid','mu_ref']
                 call MPI_BCAST(lag_params%${VAR}$, 1, mpi_p, 0, MPI_COMM_WORLD, ierr)
             #:endfor
 
@@ -1015,14 +1015,16 @@ contains
         !! @param dvel Time derivative of velocity of each particle
         !! @param lag_num_ts Number of stages in time-stepping scheme
         !! @param nParticles Local number of particles
-    impure subroutine s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats, Rmin_stats, particle_mass, f_p, &
+    impure subroutine s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats, Rmin_stats, particle_mass, particle_seed, f_p, fqs_fluct, &
                                                      lag_id, rad, pos, &
                                                      posPrev, vel, scoord, drad, dpos, &
                                                      dvel, lag_num_ts, nParticles, dest)
 
         integer, dimension(:) :: p_owner_rank
         real(wp), dimension(:) :: particle_R0, Rmax_stats, Rmin_stats, particle_mass
+        integer, dimension(:) :: particle_seed
         real(wp), dimension(:, :) :: f_p
+        real(wp), dimension(:, :) :: fqs_fluct
         integer, dimension(:, :) :: lag_id
         real(wp), dimension(:, :) :: rad, drad
         real(wp), dimension(:, :, :) :: pos, posPrev, vel, scoord, dpos, dvel
@@ -1116,7 +1118,9 @@ contains
                     call MPI_Pack(Rmax_stats(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     call MPI_Pack(Rmin_stats(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     call MPI_Pack(particle_mass(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
+                    call MPI_Pack(particle_seed(particle_id), 1, MPI_INTEGER, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     call MPI_Pack(f_p(particle_id, :), 3, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
+                    call MPI_Pack(fqs_fluct(particle_id, :), 3, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     ! call MPI_Pack(gas_betaT(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     ! call MPI_Pack(gas_betaC(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
                     ! call MPI_Pack(bub_dphidt(particle_id), 1, mpi_p, p_send_buff(send_offset), p_buff_size, position, MPI_COMM_WORLD, ierr)
@@ -1173,7 +1177,9 @@ contains
                     call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, Rmax_stats(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)
                     call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, Rmin_stats(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)
                     call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, particle_mass(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)
+                    call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, particle_seed(particle_id), 1, MPI_INTEGER, MPI_COMM_WORLD, ierr)
                     call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, f_p(particle_id, :), 3, mpi_p, MPI_COMM_WORLD, ierr)
+                    call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, fqs_fluct(particle_id, :), 3, mpi_p, MPI_COMM_WORLD, ierr)
                     ! call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, gas_betaT(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)
                     ! call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, gas_betaC(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)
                     ! call MPI_Unpack(p_recv_buff(recv_offset), p_recv_size, position, bub_dphidt(particle_id), 1, mpi_p, MPI_COMM_WORLD, ierr)

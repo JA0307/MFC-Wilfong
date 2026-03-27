@@ -895,6 +895,8 @@ contains
         lag_params%added_mass_model = dflt_int
         lag_params%interpolation_order = dflt_int
         lag_params%collision_force = .false.
+        lag_params%qs_fluct_force = .false.
+        lag_params%mu_ref = dflt_real
 
         moving_lag_bubbles = .false.
         lag_vel_model = dflt_int
@@ -1275,8 +1277,8 @@ contains
             beta_vars(1:3) = [1, 2, 5]
             $:GPU_UPDATE(device='[beta_vars]')
         elseif (particles_lagrange) then
-            @:ALLOCATE(beta_vars(1:8))
-            beta_vars(1:8) = [1, 2, 3, 4, 5, 6, 7, 8]
+            @:ALLOCATE(beta_vars(1:7))
+            beta_vars(1:7) = [1, 2, 3, 4, 5, 6, 7]
             $:GPU_UPDATE(device='[beta_vars]')
         end if
 

@@ -20,7 +20,7 @@ module m_model
 
     public :: f_model_read, s_model_write, s_model_free, f_model_is_inside, models, gpu_ntrs, &
               gpu_trs_v, gpu_trs_n, gpu_boundary_v, gpu_boundary_edge_count, &
-              gpu_total_vertices, stl_bounding_boxes
+              gpu_total_vertices, stl_bounding_boxes, f_model_random_number
 
     ! Subroutines for STL immersed boundaries
     public :: s_check_boundary, s_register_edge, f_model_is_inside_flat, &

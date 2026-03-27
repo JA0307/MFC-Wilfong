@@ -510,13 +510,16 @@ module m_derived_types
         integer :: stokes_drag              !< Particle stokes drag
         integer :: added_mass_model         !< Particle added mass model
         integer :: interpolation_order      !< Fluid-to-Particle barycentric interpolation order
-        logical :: collision_force           !< Include collision forces
+        logical :: collision_force          !< Include collision forces
+        logical :: qs_fluct_force           !< QS Fluctuations
 
         character(LEN=pathlen_max) :: input_path !< Path to lag_bubbles.dat
         real(wp) :: epsilonb         !< Standard deviation scaling for the gaussian function
         real(wp) :: charwidth        !< Domain virtual depth (z direction, for 2D simulations)
         integer :: charNz           !< Number of grid cells in characteristic depth
         real(wp) :: valmaxvoid       !< Maximum void fraction permitted
+
+        real(wp) :: mu_ref           !<Reference Viscosity for particle drag
 
     end type bubbles_lagrange_parameters
 

@@ -1190,8 +1190,11 @@ def _load():  # pylint: disable=too-many-locals,too-many-statements
               "interpolation_order"]:
         _r(f"lag_params%{a}", INT, {'particles'})
 
-    for a in ["collision_force"]:
+    for a in ["collision_force", "qs_fluct_force"]:
         _r(f"lag_params%{a}", LOG, {'particles'})
+
+    for a in ["mu_ref"]:
+        _r(f"lag_params%{a}", REAL, {'particles'})
 
     # --- chem_params ---
     for a in ["diffusion", "reactions"]:

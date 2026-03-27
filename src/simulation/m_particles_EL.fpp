@@ -45,6 +45,9 @@ module m_particles_EL
     real(wp), allocatable, dimension(:) :: p_AM            !< Particle Added Mass
     $:GPU_DECLARE(create='[p_AM]')
 
+    integer, allocatable, dimension(:) :: particle_seed           !< Particle Seed
+    $:GPU_DECLARE(create='[particle_seed]')
+
     integer, allocatable, dimension(:) :: p_owner_rank            !< Particle Added Mass
     $:GPU_DECLARE(create='[p_owner_rank]')
 
@@ -82,10 +85,15 @@ module m_particles_EL
     integer, parameter :: alphaupx_id = 2 !< x particle momentum index
     integer, parameter :: alphaupy_id = 3 !< y particle momentum index
     integer, parameter :: alphaupz_id = 4 !< z particle momentum index
-    integer, parameter :: Smx_id = 5
-    integer, parameter :: Smy_id = 6
-    integer, parameter :: Smz_id = 7
-    integer, parameter :: SE_id = 8
+    integer, parameter :: alphaup2x_id = 5 !< x particle momentum index
+    integer, parameter :: alphaup2y_id = 6 !< y particle momentum index
+    integer, parameter :: alphaup2z_id = 7 !< z particle momentum index
+    integer, parameter :: Smx_id = 8
+    integer, parameter :: Smy_id = 9
+    integer, parameter :: Smz_id = 10
+    integer, parameter :: SE_id = 11
+
+    type(scalar_field), dimension(:), allocatable :: q_particles_old !< previous timestep projected values
 
     type(scalar_field), dimension(:), allocatable :: field_vars !< For cell quantities (field gradients, etc.)
     integer, parameter :: dPx_id = 1 !< Spatial pressure gradient in x, y, and z
@@ -137,8 +145,14 @@ module m_particles_EL
     real(wp), allocatable, dimension(:, :) :: f_p !< force on each particle
     $:GPU_DECLARE(create='[f_p]')
 
+    real(wp), allocatable, dimension(:, :) :: fqs_fluct !< QS fluctuation force on each particle
+    $:GPU_DECLARE(create='[fqs_fluct]')
+
     real(wp), allocatable, dimension(:) :: gSum !< gaussian sum for each particle
     $:GPU_DECLARE(create='[gSum]')
+
+    real(wp), allocatable, dimension(:) :: gSum_sources !< gaussian sum for each particle
+    $:GPU_DECLARE(create='[gSum_sources]')
 
     integer, allocatable :: force_recv_ids(:) !< ids of collision forces received from other ranks
     real(wp), allocatable :: force_recv_vals(:) !< collision forces received from other ranks
@@ -178,10 +192,7 @@ contains
         integer :: save_count
         real(wp) :: qtime
 
-        real(wp) :: myR, func_sum
-        real(wp), dimension(3) :: myPos, myVel, myForce
-        integer, dimension(3) :: cell
-        logical :: only_beta = .true.
+        integer :: ind_end_loc
 
         if (cfl_dt) then
             save_count = n_start
@@ -201,10 +212,10 @@ contains
         ! Allocate space for the Eulerian fields needed to map the effect of the particles
         if (lag_params%solver_approach == 1) then
             ! One-way coupling
-            q_particles_idx = 1 !For tracking volume fraction
+            q_particles_idx = 7 !For tracking volume fraction, alpha_p u_p (x(2),y(3),z(4)), alpha_p u_p^2 (x(5),y(6),z(7))
         elseif (lag_params%solver_approach == 2) then
             !Two-way coupling
-            q_particles_idx = 8 !For tracking volume fraction(1), x-mom(2), y-mom(3), z-mom(4), and energy(5) sources, and alpha_p u_p (x(6),y(7),z(8))
+            q_particles_idx = 11 !For tracking volume fraction(1), alpha_p u_p (x(2),y(3),z(4)), alpha_p u_p^2 (x(5),y(6),z(7)), x-mom(8), y-mom(9), z-mom(10), and energy(11) sources
         else
             call s_mpi_abort('Please check the lag_params%solver_approach input')
         end if
@@ -253,6 +264,14 @@ contains
                 idwbuff(2)%beg:idwbuff(2)%end, &
                 idwbuff(3)%beg:idwbuff(3)%end))
             @:ACC_SETUP_SFs(kahan_comp(i))
+        end do
+
+        @:ALLOCATE(q_particles_old(1:1))
+        do i = 1, 1
+            @:ALLOCATE(q_particles_old(i)%sf(idwbuff(1)%beg:idwbuff(1)%end, &
+                idwbuff(2)%beg:idwbuff(2)%end, &
+                idwbuff(3)%beg:idwbuff(3)%end))
+            @:ACC_SETUP_SFs(q_particles_old(i))
         end do
 
         @:ALLOCATE(field_vars(1:nField_vars))
@@ -316,6 +335,7 @@ contains
         @:ALLOCATE(Rmax_stats_part(1:nParticles_glb))
         @:ALLOCATE(Rmin_stats_part(1:nParticles_glb))
         @:ALLOCATE(particle_mass(1:nParticles_glb))
+        @:ALLOCATE(particle_seed(1:nParticles_glb))
         @:ALLOCATE(p_AM(1:nParticles_glb))
         @:ALLOCATE(p_owner_rank(1:nParticles_glb))
         @:ALLOCATE(particle_rad(1:nParticles_glb, 1:2))
@@ -327,7 +347,9 @@ contains
         @:ALLOCATE(particle_dposdt(1:nParticles_glb, 1:3, 1:lag_num_ts))
         @:ALLOCATE(particle_dveldt(1:nParticles_glb, 1:3, 1:lag_num_ts))
         @:ALLOCATE(f_p(1:nParticles_glb, 1:3))
+        @:ALLOCATE(fqs_fluct(1:nParticles_glb, 1:3))
         @:ALLOCATE(gSum(1:nParticles_glb))
+        @:ALLOCATE(gSum_sources(1:nParticles_glb))
 
         @:ALLOCATE(linked_list(1:nParticles_glb))
 
@@ -363,28 +385,19 @@ contains
 
         call s_read_input_particles(q_cons_vf, bc_type)
 
-        call s_reset_cell_vars(only_beta)
+        if (lag_params%qs_fluct_force) then
+            ind_end_loc = alphaup2z_id
+        elseif (lag_params%solver_approach == 2) then
+            ind_end_loc = alphaupz_id
+        else
+            ind_end_loc = alphaf_id
+        end if
 
-        $:GPU_PARALLEL_LOOP(private='[k,cell,myR,myPos,myVel,myForce,func_sum]',copyin='[only_beta]')
-        do k = 1, n_el_particles_loc
+        call s_smear_field_contributions(bc_type, alphaf_id, ind_end_loc, .true.)
 
-            cell = fd_number - buff_size
-            call s_locate_cell(particle_pos(k, 1:3, 1), cell, particle_s(k, 1:3, 1))
-
-            myR = particle_R0(k)
-            myPos = particle_pos(k, 1:3, 1)
-            myVel = particle_vel(k, 1:3, 1)
-            myForce = f_p(k, :)
-            !Compute the total gaussian contribution for each particle for normalization
-            call s_compute_gaussian_contribution(myR, myPos, cell, func_sum)
-            gSum(k) = func_sum
-
-            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, kahan_comp, only_beta)
-
-        end do
-        $:END_GPU_PARALLEL_LOOP()
-
-        call s_finalize_beta_field(bc_type, only_beta)
+        if (lag_params%solver_approach == 2) then
+            call s_compute_gaussian_source_contribution()
+        end if
 
         npts = (nWeights_interp - 1)/2
         call s_compute_barycentric_weights(npts) !For interpolation
@@ -484,7 +497,7 @@ contains
                     end if
                     if (indomain) then
                         particle_id = particle_id + 1
-                        call s_add_particles(inputParticle, q_cons_vf, particle_id)
+                        call s_add_particles(inputParticle, q_cons_vf, particle_id, id)
                         lag_part_id(particle_id, 1) = id      !global ID
                         lag_part_id(particle_id, 2) = particle_id  !local ID
                         n_el_particles_loc = particle_id              ! local number of particles
@@ -513,8 +526,8 @@ contains
 
         $:GPU_UPDATE(device='[particles_lagrange, lag_params]')
 
-        $:GPU_UPDATE(device='[lag_part_id,particle_R0,Rmax_stats_part,Rmin_stats_part,particle_mass, &
-            & f_p,p_AM,p_owner_rank,gid_to_local, &
+        $:GPU_UPDATE(device='[lag_part_id,particle_R0,Rmax_stats_part,Rmin_stats_part,particle_mass,particle_seed, &
+            & f_p,fqs_fluct,p_AM,p_owner_rank,gid_to_local, &
             & particle_rad,particle_pos,particle_posPrev,particle_vel, &
             & particle_s,particle_draddt, &
             & particle_dposdt,particle_dveldt,n_el_particles_loc]')
@@ -548,11 +561,11 @@ contains
         !! @param inputPart Particle information
         !! @param q_cons_vf Conservative variables
         !! @param part_id Local id of the particle
-    impure subroutine s_add_particles(inputPart, q_cons_vf, part_id)
+    impure subroutine s_add_particles(inputPart, q_cons_vf, part_id, glb_part_id)
 
         type(scalar_field), dimension(sys_size), intent(in) :: q_cons_vf
         real(wp), dimension(8), intent(in) :: inputPart
-        integer, intent(in) :: part_id
+        integer, intent(in) :: part_id, glb_part_id
         integer :: i
 
         real(wp) :: pliq, volparticle, concvap, totalmass, kparticle, cpparticle
@@ -577,6 +590,7 @@ contains
 
         !Initialize Particle Sources
         f_p(part_id, 1:3) = 0._wp
+        fqs_fluct(part_id, 1:3) = 0._wp
         p_AM(part_id) = 0._wp
         p_owner_rank(part_id) = proc_rank
         gid_to_local(part_id) = -1
@@ -613,6 +627,8 @@ contains
         if (particle_mass(part_id) <= 0._wp) then
             call s_mpi_abort("The initial particle mass is negative or zero. Check the particle file.")
         end if
+
+        particle_seed(part_id) = glb_part_id*1103515245 + 12345
 
     end subroutine s_add_particles
 
@@ -800,9 +816,9 @@ contains
         real(wp), dimension(idwbuff(1)%beg:, idwbuff(2)%beg:, idwbuff(3)%beg:, 1:), intent(inout) :: vR_x, vR_y, vR_z
 
         integer, dimension(3) :: cell
-        real(wp) :: myMass, myR, myBeta_c, myBeta_t, myR0, myRe, myGamma, rmass_add, func_sum
-        real(wp), dimension(3) :: myVel, myPos, force_vec, s_cell, myForce
-        logical :: only_beta = .false.
+        real(wp) :: myMass, myR, myBeta_c, myBeta_t, myR0, myRe, myGamma, rmass_add, func_sum, func_sum_sources
+        real(wp), dimension(3) :: myVel, myPos, force_vec, s_cell, myForce, my_fqs_fluct, new_fqs_fluct
+        integer :: mySeed, new_seed
 
         integer :: k, l, i, j, dir
 
@@ -842,13 +858,13 @@ contains
         end if
 
         myGamma = (1._wp/fluid_pp(1)%gamma) + 1._wp
-        myRe = 1.845e-5_wp !fluid_pp(1)%Re(1) !Need a viscosity model for when modeling inviscid eulerian fluid !< Dynamic viscosity
+        myRe = lag_params%mu_ref !1.845e-5_wp !fluid_pp(1)%Re(1) !Need a viscosity model for when modeling inviscid eulerian fluid !< Dynamic viscosity
 
         call nvtxStartRange("LAGRANGE-PARTICLE-DYNAMICS")
 
         !> Compute Fluid-Particle Forces (drag/pressure/added mass) and convert to particle acceleration
-        $:GPU_PARALLEL_LOOP(private='[i,k,l,cell,s_cell,myMass,myR,myR0,myPos,myVel,force_vec,rmass_add,func_sum]',&
-        & copyin='[stage, myGamma, myRe, only_beta]')
+        $:GPU_PARALLEL_LOOP(private='[i,k,l,cell,s_cell,myMass,myR,myR0,myPos,myVel,mySeed,my_fqs_fluct,new_fqs_fluct,force_vec,rmass_add,func_sum,new_seed]',&
+        & copyin='[stage, myGamma, myRe]')
         do k = 1, n_el_particles_loc
 
             f_p(k, :) = 0._wp
@@ -867,17 +883,25 @@ contains
             myPos = particle_pos(k, :, 2)
             myVel = particle_vel(k, :, 2)
 
+            mySeed = particle_seed(k)
+            my_fqs_fluct = fqs_fluct(k, :)
+
             particle_dposdt(k, :, stage) = 0._wp
             particle_dveldt(k, :, stage) = 0._wp
             particle_draddt(k, stage) = 0._wp
 
-            call s_get_particle_force(myPos, myR, myVel, myMass, myRe, myGamma, cell, &
+            call s_get_particle_force(myPos, myR, myVel, myMass, myRe, myGamma, mySeed, my_fqs_fluct, cell, &
                                       q_prim_vf, q_cons_vf, q_particles, field_vars, rhs_old, duidxj_id, &
                                       weights_x_interp, weights_y_interp, weights_z_interp, &
-                                      force_vec, rmass_add)
+                                      force_vec, rmass_add, new_seed, new_fqs_fluct)
 
             p_AM(k) = rMass_add
             f_p(k, :) = f_p(k, :) + force_vec(:)
+
+            if (lag_params%qs_fluct_force) then
+                particle_seed(k) = new_seed
+                fqs_fluct(k, :) = new_fqs_fluct
+            end if
 
             if (.not. lag_params%collision_force) then
                 myMass = particle_mass(k) + p_AM(k)
@@ -892,41 +916,9 @@ contains
         end do
         $:END_GPU_PARALLEL_LOOP()
 
-        !!!!!!!!!!!!!!!!!!
         if (lag_params%solver_approach == 2) then
-
-            call s_reset_cell_vars(only_beta)
-
-            $:GPU_PARALLEL_LOOP(private='[k,cell,s_cell,myR,myPos,myVel,myForce,func_sum]',copyin='[only_beta]')
-            do k = 1, n_el_particles_loc
-                myR = particle_rad(k, 2)
-                myPos = particle_pos(k, 1:3, 2)
-                myVel = particle_vel(k, 1:3, 2)
-                myForce = f_p(k, :)
-
-                ! cell = fd_number - buff_size
-                ! call s_locate_cell(particle_pos(k, 1:3, 2), cell, particle_s(k, 1:3, 2))
-
-                s_cell = particle_s(k, 1:3, 2)
-                cell = int(s_cell(:))
-                do i = 1, num_dims
-                    if (s_cell(i) < 0._wp) cell(i) = cell(i) - 1
-                end do
-
-                !Compute the total gaussian contribution for each particle for normalization
-                ! call s_compute_gaussian_contribution(myR, myPos, cell, func_sum)
-                ! gSum(k) = func_sum
-                func_sum = gSum(k)
-
-                call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, kahan_comp, only_beta)
-
-            end do
-
-            ! Update void fraction and communicate buffers
-            call s_finalize_beta_field(bc_type, only_beta)
-
+            call s_smear_field_contributions(bc_type, Smx_id, SE_id, .false.)
         end if
-        !!!!!!!!!!!!!!!!!!!
 
         call nvtxStartRange("LAGRANGE-PARTICLE-COLLISIONS")
         if (lag_params%collision_force) then
@@ -951,6 +943,89 @@ contains
         call nvtxEndRange
 
     end subroutine s_compute_particle_EL_dynamics
+
+    subroutine s_smear_field_contributions(bc_type, ind_start, ind_end, recompute_gSum)
+        type(integer_field), dimension(1:num_dims, 1:2), intent(in) :: bc_type
+        integer, intent(in) :: ind_start, ind_end
+        logical, intent(in) :: recompute_gSum
+        integer :: i, j, k, l, nVar
+        real(wp) :: myR, func_sum, func_sum_sources, func_sum_sources_dummy
+        real(wp), dimension(3) :: myVel, myPos, s_cell, myForce
+        integer, dimension(3) :: cell
+        integer, dimension(:), allocatable :: vars_send
+
+        nVar = ind_end - ind_start + 1
+        allocate (vars_send(nVar))
+
+        do i = 1, nVar
+            vars_send(i) = ind_start + (i - 1)
+        end do
+
+        $:GPU_PARALLEL_LOOP(private='[i,j,k,l]', collapse=4)
+        do i = ind_start, ind_end
+            do l = idwbuff(3)%beg, idwbuff(3)%end
+                do k = idwbuff(2)%beg, idwbuff(2)%end
+                    do j = idwbuff(1)%beg, idwbuff(1)%end
+                        if (i <= q_particles_idx) then
+                            q_particles(i)%sf(j, k, l) = 0._wp
+                            kahan_comp(i)%sf(j, k, l) = 0._wp
+                        end if
+                    end do
+                end do
+            end do
+        end do
+        $:END_GPU_PARALLEL_LOOP()
+
+        $:GPU_PARALLEL_LOOP(private='[i,k,cell,s_cell,myR,myPos,myVel,myForce,func_sum,func_sum_sources_dummy]')
+        do k = 1, n_el_particles_loc
+            myR = particle_rad(k, 2)
+            myPos = particle_pos(k, 1:3, 2)
+            myVel = particle_vel(k, 1:3, 2)
+            myForce = f_p(k, :)
+
+            if (recompute_gSum) then
+                cell = fd_number - buff_size
+                call s_locate_cell(particle_pos(k, 1:3, 2), cell, particle_s(k, 1:3, 2))
+
+                !Compute the total gaussian contribution for each particle for normalization
+                call s_compute_gaussian_contribution(myR, myPos, cell, func_sum, func_sum_sources_dummy, q_particles)
+                gSum(k) = func_sum
+
+            else
+                s_cell = particle_s(k, 1:3, 2)
+                cell = int(s_cell(:))
+                do i = 1, num_dims
+                    if (s_cell(i) < 0._wp) cell(i) = cell(i) - 1
+                end do
+                func_sum = gSum(k)
+                func_sum_sources = gSum_sources(k)
+            end if
+
+            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, func_sum_sources, cell, q_particles, kahan_comp, ind_start, ind_end)
+
+        end do
+
+        call nvtxStartRange("PARTICLES-LAGRANGE-BETA-COMM")
+        call s_populate_beta_buffers(q_particles, kahan_comp, bc_type, nVar, vars_send)
+        call nvtxEndRange
+
+        if (alphaf_id >= ind_start .and. alphaf_id <= ind_end) then
+            !Store 1-q_particles(1)
+            $:GPU_PARALLEL_LOOP(private='[j,k,l]', collapse=3)
+            do l = idwbuff(3)%beg, idwbuff(3)%end
+                do k = idwbuff(2)%beg, idwbuff(2)%end
+                    do j = idwbuff(1)%beg, idwbuff(1)%end
+                        q_particles(alphaf_id)%sf(j, k, l) = 1._wp - q_particles(alphaf_id)%sf(j, k, l)
+                        ! Limiting void fraction given max value
+                        q_particles(alphaf_id)%sf(j, k, l) = max(q_particles(alphaf_id)%sf(j, k, l), &
+                                                                 1._wp - lag_params%valmaxvoid)
+                    end do
+                end do
+            end do
+        end if
+
+        !!!!!!!!!!!!!!!!!!!
+    end subroutine s_smear_field_contributions
 
     !>  Contains the particle collision force computation.
     subroutine s_compute_particle_EL_collisions(stage, bc_type)
@@ -1221,7 +1296,7 @@ contains
 
         call nvtxStartRange("LAG-GHOSTADD")
         call nvtxStartRange("LAG-GHOSTADD-DEV2HOST")
-        $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+        $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, n_el_particles_loc, &
@@ -1235,7 +1310,7 @@ contains
             call nvtxEndRange
 
             call nvtxStartRange("LAG-GHOSTADD-SENDRECV")
-            call s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            call s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
                                                 lag_part_id, &
                                                 particle_rad, particle_pos, particle_posPrev, particle_vel, &
                                                 particle_s, particle_draddt, particle_dposdt, particle_dveldt, lag_num_ts, n_el_particles_loc, &
@@ -1244,7 +1319,7 @@ contains
         end if
 
         call nvtxStartRange("LAG-GHOSTADD-HOST2DEV")
-        $:GPU_UPDATE(device='[p_owner_rank,particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+        $:GPU_UPDATE(device='[p_owner_rank,particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, n_el_particles_loc]')
@@ -1405,63 +1480,6 @@ contains
         call s_build_linked_list()
 
     end subroutine s_reset_linked_list
-
-    !>  The purpose of this subroutine is to smear the effect of the particles in the Eulerian framework
-    subroutine s_reset_cell_vars(onlyBeta)
-
-        logical, intent(in) :: onlyBeta
-        integer :: i, j, k, l
-
-        $:GPU_PARALLEL_LOOP(private='[i,j,k,l]', collapse=4)
-        do i = 1, max(nField_vars, q_particles_idx)  ! outermost is largest of the i-like dims
-            do l = idwbuff(3)%beg, idwbuff(3)%end
-                do k = idwbuff(2)%beg, idwbuff(2)%end
-                    do j = idwbuff(1)%beg, idwbuff(1)%end
-                        if (onlyBeta) then
-                            ! Zero field_vars if i <= nField_vars
-                            if (i <= nField_vars) field_vars(i)%sf(j, k, l) = 0._wp
-                        end if
-                        ! Zero q_particles if i <= q_particles_idx
-                        if (i <= q_particles_idx) then
-                            q_particles(i)%sf(j, k, l) = 0._wp
-                            kahan_comp(i)%sf(j, k, l) = 0._wp
-                        end if
-                    end do
-                end do
-            end do
-        end do
-        $:END_GPU_PARALLEL_LOOP()
-
-    end subroutine s_reset_cell_vars
-
-    subroutine s_finalize_beta_field(bc_type, onlyBeta)
-
-        type(integer_field), dimension(1:num_dims, 1:2), intent(in) :: bc_type
-        integer :: j, k, l
-        logical, intent(in) :: onlyBeta
-
-        call nvtxStartRange("PARTICLES-LAGRANGE-BETA-COMM")
-        if (onlyBeta) then
-            call s_populate_beta_buffers(q_particles, kahan_comp, bc_type, 1)
-        else
-            call s_populate_beta_buffers(q_particles, kahan_comp, bc_type, q_particles_idx)
-        end if
-        call nvtxEndRange
-
-        !Store 1-q_particles(1)
-        $:GPU_PARALLEL_LOOP(private='[j,k,l]', collapse=3)
-        do l = idwbuff(3)%beg, idwbuff(3)%end
-            do k = idwbuff(2)%beg, idwbuff(2)%end
-                do j = idwbuff(1)%beg, idwbuff(1)%end
-                    q_particles(alphaf_id)%sf(j, k, l) = 1._wp - q_particles(alphaf_id)%sf(j, k, l)
-                    ! Limiting void fraction given max value
-                    q_particles(alphaf_id)%sf(j, k, l) = max(q_particles(alphaf_id)%sf(j, k, l), &
-                                                             1._wp - lag_params%valmaxvoid)
-                end do
-            end do
-        end do
-
-    end subroutine s_finalize_beta_field
 
     subroutine s_build_linked_list()
         integer :: k, glb_id, i
@@ -1651,13 +1669,11 @@ contains
         integer :: patch_id, newBubs, new_idx
         integer, dimension(3) :: cell
         logical :: inc_ghost = .false.
-        real(wp) :: myR, func_sum
-        real(wp), dimension(3) :: myPos, myVel, myForce
-        logical :: only_beta = .true.
+        integer :: ind_end_loc
 
         call nvtxStartRange("LAG-BC")
         call nvtxStartRange("LAG-BC-DEV2HOST")
-        $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+        $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, keep_bubble, n_el_particles_loc, &
@@ -1671,7 +1687,7 @@ contains
             call nvtxEndRange
 
             call nvtxStartRange("LAG-BC-SENDRECV")
-            call s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            call s_mpi_sendrecv_solid_particles(p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
                                                 lag_part_id, &
                                                 particle_rad, particle_pos, particle_posPrev, particle_vel, &
                                                 particle_s, particle_draddt, particle_dposdt, particle_dveldt, lag_num_ts, n_el_particles_loc, &
@@ -1680,7 +1696,7 @@ contains
         end if
 
         call nvtxStartRange("LAG-BC-HOST2DEV")
-        $:GPU_UPDATE(device='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+        $:GPU_UPDATE(device='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, n_el_particles_loc]')
@@ -1789,7 +1805,7 @@ contains
         if (n_el_particles_loc > 0) then
             call nvtxStartRange("LAG-BC")
             call nvtxStartRange("LAG-BC-DEV2HOST")
-            $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            $:GPU_UPDATE(host='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
                 & lag_part_id, particle_rad, &
                 & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
                 & particle_dposdt, particle_dveldt, keep_bubble, n_el_particles_loc, &
@@ -1836,39 +1852,55 @@ contains
                 end if
             end do
             call nvtxStartRange("LAG-BC-HOST2DEV")
-            $:GPU_UPDATE(device='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, f_p, &
+            $:GPU_UPDATE(device='[p_owner_rank, particle_R0, Rmax_stats_part, Rmin_stats_part, particle_mass, particle_seed, f_p, fqs_fluct, &
             & lag_part_id, particle_rad, &
             & particle_pos, particle_posPrev, particle_vel, particle_s, particle_draddt, &
             & particle_dposdt, particle_dveldt, n_el_particles_loc]')
             call nvtxEndRange
         end if
 
-        call s_reset_cell_vars(only_beta)
+        if (lag_params%qs_fluct_force) then
+            ind_end_loc = alphaup2z_id
+        elseif (lag_params%solver_approach == 2) then
+            ind_end_loc = alphaupz_id
+        else
+            ind_end_loc = alphaf_id
+        end if
 
-        $:GPU_PARALLEL_LOOP(private='[cell,myR,myPos,myVel,myForce,func_sum]',copyin='[only_beta]')
-        do k = 1, n_el_particles_loc
-            myR = particle_rad(k, 2)
-            myPos = particle_pos(k, 1:3, 2)
-            myVel = particle_vel(k, 1:3, 2)
-            myForce = f_p(k, :)
+        call s_smear_field_contributions(bc_type, alphaf_id, ind_end_loc, .true.)
 
-            cell = fd_number - buff_size
-            call s_locate_cell(particle_pos(k, 1:3, 2), cell, particle_s(k, 1:3, 2))
-
-            !Compute the total gaussian contribution for each particle for normalization
-            call s_compute_gaussian_contribution(myR, myPos, cell, func_sum)
-            gSum(k) = func_sum
-
-            call s_gaussian_atomic(myR, myVel, myPos, myForce, func_sum, cell, q_particles, kahan_comp, only_beta)
-
-        end do
-
-        ! Update void fraction and communicate buffers
-        call s_finalize_beta_field(bc_type, only_beta)
+        if (lag_params%solver_approach == 2) then
+            call s_compute_gaussian_source_contribution()
+        end if
 
         call nvtxEndRange ! LAG-BC
 
     end subroutine s_enforce_EL_particles_boundary_conditions
+
+    subroutine s_compute_gaussian_source_contribution()
+
+        real(wp) :: myR, func_sum_dummy, func_sum_sources
+        real(wp), dimension(3) :: myPos, s_cell
+        integer :: k, i
+        integer, dimension(3) :: cell
+
+        $:GPU_PARALLEL_LOOP(private='[k,i,cell,s_cell,myR,myPos,func_sum_dummy,func_sum_sources]')
+        do k = 1, n_el_particles_loc
+            myR = particle_rad(k, 2)
+            myPos = particle_pos(k, 1:3, 2)
+
+            s_cell = particle_s(k, 1:3, 2)
+            cell = int(s_cell(:))
+            do i = 1, num_dims
+                if (s_cell(i) < 0._wp) cell(i) = cell(i) - 1
+            end do
+
+            !Compute the total gaussian contribution for each particle for normalization
+            call s_compute_gaussian_contribution(myR, myPos, cell, func_sum_dummy, func_sum_sources, q_particles)
+            gSum_sources(k) = func_sum_sources
+
+        end do
+    end subroutine s_compute_gaussian_source_contribution
 
     !> This subroutine returns the computational coordinate of the cell for the given position.
           !! @param pos Input coordinates
@@ -2705,6 +2737,7 @@ contains
         Rmax_stats_part(dest) = Rmax_stats_part(src)
         Rmin_stats_part(dest) = Rmin_stats_part(src)
         particle_mass(dest) = particle_mass(src)
+        particle_seed(dest) = particle_seed(src)
         lag_part_id(dest, 1) = lag_part_id(src, 1)
         particle_rad(dest, 1:2) = particle_rad(src, 1:2)
         particle_vel(dest, 1:3, 1:2) = particle_vel(src, 1:3, 1:2)
@@ -2713,6 +2746,7 @@ contains
         particle_posPrev(dest, 1:3, 1:2) = particle_posPrev(src, 1:3, 1:2)
         particle_draddt(dest, 1:lag_num_ts) = particle_draddt(src, 1:lag_num_ts)
         f_p(dest, 1:3) = f_p(src, 1:3)
+        fqs_fluct(dest, 1:3) = fqs_fluct(src, 1:3)
         particle_dposdt(dest, 1:3, 1:lag_num_ts) = particle_dposdt(src, 1:3, 1:lag_num_ts)
         particle_dveldt(dest, 1:3, 1:lag_num_ts) = particle_dveldt(src, 1:3, 1:lag_num_ts)
 
@@ -2733,6 +2767,11 @@ contains
         end do
         @:DEALLOCATE(q_particles)
         @:DEALLOCATE(kahan_comp)
+
+        do i = 1, 1
+            @:DEALLOCATE(q_particles_old(i)%sf)
+        end do
+        @:DEALLOCATE(q_particles_old)
 
         do i = 1, nField_vars
             @:DEALLOCATE(field_vars(i)%sf)
@@ -2766,6 +2805,7 @@ contains
         @:DEALLOCATE(Rmax_stats_part)
         @:DEALLOCATE(Rmin_stats_part)
         @:DEALLOCATE(particle_mass)
+        @:DEALLOCATE(particle_seed)
         @:DEALLOCATE(p_AM)
         @:DEALLOCATE(p_owner_rank)
         @:DEALLOCATE(particle_rad)
@@ -2777,7 +2817,9 @@ contains
         @:DEALLOCATE(particle_dposdt)
         @:DEALLOCATE(particle_dveldt)
         @:DEALLOCATE(f_p)
+        @:DEALLOCATE(fqs_fluct)
         @:DEALLOCATE(gSum)
+        @:DEALLOCATE(gSum_sources)
 
         @:DEALLOCATE(force_recv_ids)
         @:DEALLOCATE(force_recv_vals)

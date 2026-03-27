@@ -866,8 +866,8 @@ contains
             allocate (beta_vars(1:3))
             beta_vars(1:3) = [1, 2, 5]
         elseif (particles_lagrange) then
-            allocate (beta_vars(1:8))
-            beta_vars(1:8) = [1, 2, 3, 4, 5, 6, 7, 8]
+            allocate (beta_vars(1:7))
+            beta_vars(1:7) = [1, 2, 3, 4, 5, 6, 7]
         end if
 
         if (chemistry) then
